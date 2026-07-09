@@ -1,0 +1,9 @@
+# Claude Code local settings
+.claude/settings.local.json
+
+# rwl-install-wizard runtime output (generated in consumer working dirs)
+rwl-install-out/
+.claude/rwl-install-profile.yaml
+
+# rwl-catalog-update runtime drift reports
+.rwl-catalog-drift/
