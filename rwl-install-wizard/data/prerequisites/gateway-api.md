@@ -11,13 +11,9 @@ You are responsible for the cluster-side Gateway API plumbing:
 - A **Gateway API implementation** installed with its CRDs (`gateway.networking.k8s.io/v1`)
   — e.g. Istio, Cilium, NGINX Gateway Fabric, or Envoy Gateway.
 - A **GatewayClass** the implementation reconciles (`kubectl get gatewayclass`).
-  - **Chart-managed Gateway** (`gatewayClassRouting`): the kit sets
-    `ingress.gateway.gatewayClassName` to the class you named and the chart
-    creates the `Gateway`. The named GatewayClass must exist.
-  - **Existing Gateway** (`gatewayExistingRouting`): the kit sets
-    `ingress.gateway.existingGateway.{name,namespace}` and the chart creates only
-    HTTPRoutes that attach to your Gateway as their `parentRef`. That Gateway must
-    already exist and expose a listener your HTTPRoutes can bind to on `<your domain>`.
+
+The routing mode you chose determines whether the chart *creates* a Gateway or
+*attaches* to one you already run — see the routing-specific prerequisite below.
 
 ### TLS caveat
 

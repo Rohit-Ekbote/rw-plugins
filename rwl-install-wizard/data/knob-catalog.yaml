@@ -163,7 +163,7 @@ axes:
               gatewayClassName: "<GATEWAY_CLASS>"
         guide_sections: [cluster-domain]
         known_issues: []
-        prereqs: [gateway-api]
+        prereqs: [gateway-api, gateway-api-class]
 
       - id: gatewayExistingRouting
         label: "Gateway API (existing Gateway) — the chart attaches HTTPRoutes to an externally-managed Gateway and does not create one"
@@ -181,7 +181,7 @@ axes:
                 namespace: "<GATEWAY_NAMESPACE>"
         guide_sections: [cluster-domain]
         known_issues: []
-        prereqs: [gateway-api]
+        prereqs: [gateway-api, gateway-api-existing]
 
   - id: registry-routing
     title: Container registry routing

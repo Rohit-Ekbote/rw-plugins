@@ -1,6 +1,6 @@
 ## Mirror registry access (cluster prerequisite)
 
-Images are pulled from your mirror at the host you supplied. Before install:
+Images are pulled from your mirror at `<REGISTRY_HOST>`. Before install:
 
 - confirm nodes can reach the mirror host and the per-upstream repos exist
   (docker-dockerhub, docker-ghcr, docker-runwhen-self-hosted, docker-suse or your
