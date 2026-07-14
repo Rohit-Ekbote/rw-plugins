@@ -59,15 +59,15 @@ axes:
       - id: clusterIssuer
         label: "cert-manager ClusterIssuer (ACME / Let's Encrypt or private ACME)"
         overlay: values-cluster.yaml
+        # TLS certificate source only. Routing enablement (ingress.enabled/type/
+        # className/gateway) is chosen in the orthogonal routing-mode axis; the
+        # chart shares ingress.tls.* across both Ingress and Gateway API modes.
         params:
           - { id: tlsClusterIssuer, prompt: "cert-manager ClusterIssuer name (e.g. letsencrypt-prod)" }
-          - { id: ingressClass, prompt: "IngressClass name — must match an ingress controller already installed in the cluster (kubectl get ingressclass; common: nginx, ingress-nginx, traefik).", required: true }
         emits:
           global:
             domain: "<DOMAIN>"
           ingress:
-            enabled: true
-            className: "<INGRESS_CLASS>"
             tls:
               enabled: true
               existingSecret: ""
@@ -76,20 +76,22 @@ axes:
                 clusterIssuer: "<TLS_CLUSTER_ISSUER>"
         guide_sections: [cluster-domain, ingress-tls]
         known_issues: [papi-cors-csrf-custom-hosts, ingress-not-rendered, tls-clusterissuer-vs-issuer]
-        prereqs: [cert-manager, ingress-controller]
+        prereqs: [cert-manager]
 
       - id: issuer
         label: "cert-manager Issuer (namespace-scoped; runner-control style)"
         overlay: values-cluster.yaml
+        # TLS certificate source only — see clusterIssuer note. The cert-manager.io/issuer
+        # annotation rides ingress.annotations (shared with Gateway mode); note that the
+        # chart's Gateway template wires cert-manager only for the ClusterIssuer path, so
+        # namespace-Issuer + Gateway API needs the operator to provision the cert (see
+        # PREREQUISITES: gateway-api).
         params:
           - { id: tlsIssuer, prompt: "cert-manager Issuer name (namespace-scoped, e.g. selfsigned-issuer)" }
-          - { id: ingressClass, prompt: "IngressClass name — must match an ingress controller already installed in the cluster (kubectl get ingressclass; common: nginx, ingress-nginx, traefik).", required: true }
         emits:
           global:
             domain: "<DOMAIN>"
           ingress:
-            enabled: true
-            className: "<INGRESS_CLASS>"
             annotations:
               cert-manager.io/issuer: "<TLS_ISSUER>"
             tls:
@@ -100,20 +102,18 @@ axes:
                 clusterIssuer: ""
         guide_sections: [cluster-domain, ingress-tls]
         known_issues: [papi-cors-csrf-custom-hosts, ingress-not-rendered, tls-clusterissuer-vs-issuer]
-        prereqs: [cert-manager, ingress-controller]
+        prereqs: [cert-manager]
 
       - id: byoSecret
         label: "Bring-your-own TLS Secret (pre-issued wildcard cert in the release namespace)"
         overlay: values-cluster.yaml
+        # TLS certificate source only — see clusterIssuer note.
         params:
           - { id: tlsSecret, prompt: "Name of the pre-created Kubernetes TLS Secret holding *.<DOMAIN> cert (e.g. wildcard-rw-example-com-tls)" }
-          - { id: ingressClass, prompt: "IngressClass name — must match an ingress controller already installed in the cluster (kubectl get ingressclass; common: nginx, ingress-nginx, traefik).", required: true }
         emits:
           global:
             domain: "<DOMAIN>"
           ingress:
-            enabled: true
-            className: "<INGRESS_CLASS>"
             tls:
               enabled: true
               existingSecret: "<TLS_SECRET>"
@@ -121,18 +121,64 @@ axes:
                 enabled: false
         guide_sections: [cluster-domain, ingress-tls, secret-preflight-checklist]
         known_issues: [papi-cors-csrf-custom-hosts, ingress-not-rendered]
+        prereqs: []
+
+  # Orthogonal to the TLS source above: how the platform exposes its HTTP services
+  # externally. The chart shares ingress.tls.*/annotations/services across both
+  # modes; this axis owns ingress.enabled/type/className and gateway.*. Gateway API
+  # support landed in chart 0.2.58 (feat(gateway) a85d170) — before that only
+  # Ingress existed. Options overlay into values-cluster.yaml, deep-merged with the
+  # cluster-shape TLS source.
+  - id: routing-mode
+    title: External routing
+    question: "How should the platform expose its HTTP services externally — via Ingress (networking.k8s.io/v1) or Gateway API (gateway.networking.k8s.io/v1)? The TLS certificate source is chosen separately (Cluster environment)."
+    options:
+      - id: ingressRouting
+        label: "Ingress — expose services via networking.k8s.io/v1 Ingress objects (requires an ingress controller such as nginx)"
+        overlay: values-cluster.yaml
+        params:
+          - { id: ingressClass, prompt: "IngressClass name — must match an ingress controller already installed in the cluster (kubectl get ingressclass; common: nginx, ingress-nginx, traefik).", required: true }
+        emits:
+          ingress:
+            enabled: true
+            type: ingress
+            className: "<INGRESS_CLASS>"
+        guide_sections: [ingress-tls]
+        known_issues: [ingress-not-rendered]
         prereqs: [ingress-controller]
 
-      - id: gatewayApi
-        label: "Gateway API — cluster routes via Gateway API (HTTPRoute), not Ingress; the chart's Ingress objects are left disabled"
+      - id: gatewayClassRouting
+        label: "Gateway API (chart-managed Gateway) — the chart creates a Gateway + HTTPRoutes; requires a Gateway API implementation and a GatewayClass"
         overlay: values-cluster.yaml
-        # [3] Gateway-API clusters do not use the chart's Ingress. Emit ONLY the
-        # domain and touch NO ingress.* keys — the chart default (ingress.enabled:
-        # false) already leaves Ingress objects unrendered. The operator provisions
-        # their own Gateway + HTTPRoute + TLS (see PREREQUISITES: gateway-api).
+        params:
+          # value-at-consumer guard: the operator's GatewayClass must reach the
+          # rendered Gateway's spec.gatewayClassName. Catches a future chart that
+          # stops honoring the value (the exact blind spot the stub option hid).
+          - { id: gatewayClass, prompt: "GatewayClass name — must match a Gateway API controller already installed in the cluster (kubectl get gatewayclass; e.g. istio, cilium, nginx-gateway, envoy-gateway).", required: true, consumers: { equals: [gatewayClassName] } }
         emits:
-          global:
-            domain: "<DOMAIN>"
+          ingress:
+            enabled: true
+            type: gateway
+            gateway:
+              gatewayClassName: "<GATEWAY_CLASS>"
+        guide_sections: [cluster-domain]
+        known_issues: []
+        prereqs: [gateway-api]
+
+      - id: gatewayExistingRouting
+        label: "Gateway API (existing Gateway) — the chart attaches HTTPRoutes to an externally-managed Gateway and does not create one"
+        overlay: values-cluster.yaml
+        params:
+          - { id: gatewayName, prompt: "Name of the existing Gateway resource the platform HTTPRoutes should attach to (kubectl get gateway -A).", required: true }
+          - { id: gatewayNamespace, prompt: "Namespace of that existing Gateway resource.", required: true }
+        emits:
+          ingress:
+            enabled: true
+            type: gateway
+            gateway:
+              existingGateway:
+                name: "<GATEWAY_NAME>"
+                namespace: "<GATEWAY_NAMESPACE>"
         guide_sections: [cluster-domain]
         known_issues: []
         prereqs: [gateway-api]
@@ -538,8 +584,9 @@ axes:
 
   - id: ingress-snippets
     title: Ingress snippet annotations
-    # dependsOn: applies only when cluster-shape is an Ingress option (clusterIssuer/
-    # issuer/byoSecret), NOT gatewayApi. SKILL skips this axis under Gateway API.
+    # dependsOn: applies only when routing-mode is ingressRouting (nginx snippet
+    # annotations are an Ingress concept), NOT the Gateway API options. SKILL skips
+    # this axis under Gateway API.
     # Default: SKILL pre-selects snippets-blocked when security-posture=hardened.
     question: "Does your ingress controller allow nginx snippet annotations? Hardened / CVE-2021-25742-patched ingress-nginx rejects them (allow-snippet-annotations=false has been the controller default since v1.9). If you chose the hardened security posture, answer No unless you have explicitly re-enabled snippets."
     options:
