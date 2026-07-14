@@ -29,8 +29,8 @@ Read-only. Never modifies anything, never runs cluster commands.
 3. List the contents of `rwl-install-out/` if it exists, grouped as:
    - Overlays: every `values-*.yaml` present, with a one-line note of which axis
      produced each (from the overlay file header).
-   - Guides: `USER-GUIDE.md`, `DEBUG-GUIDE.md` (with their section counts).
-   - Prerequisites: `PREREQUISITES.md` if present — summarize its section
+   - Docs: `index.html` (landing page), `USER-GUIDE.html`, `DEBUG-GUIDE.html`.
+   - Prerequisites: `PREREQUISITES.html` if present — summarize its section
      headings (the cluster dependencies + pre-created secrets the operator must
      satisfy before installing).
 
@@ -38,9 +38,9 @@ Read-only. Never modifies anything, never runs cluster commands.
    and suggest running `/rwl-install`.
 
 4. Print the exact install command line the kit implies, reading the ordered
-   `-f` overlay list from `USER-GUIDE.md`'s "Install day" section. Do NOT invent
-   secret values; show secret creation only as the `<PLACEHOLDER>` templates
-   already in the guide. If `PREREQUISITES.md` is present, also point the operator
+   `-f` overlay list from the composed `helm` command in `USER-GUIDE.html`. Do NOT
+   invent secret values; show secret creation only as the `<PLACEHOLDER>` templates
+   already in the guide. If `PREREQUISITES.html` is present, also point the operator
    at its pre-flight render-gate command (to dry-run the overlays before install)
    and remind them the prerequisites must be satisfied first.
 

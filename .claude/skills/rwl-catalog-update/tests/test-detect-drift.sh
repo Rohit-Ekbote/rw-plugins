@@ -153,4 +153,44 @@ foundf="$(grep -c $'\tfail\t' "$OUTF/findings.tsv")"
 [ "$foundf" = "5" ] && ok "exactly 5 NEW fails flagged (collation-safe count)" || no "wrong NEW fail count: $foundf (want 5)"
 rm -rf "$OUTF"
 
+echo "== coverage: a new template subsystem + discriminator (not in baseline) is flagged =="
+OUTC="$(mktemp -d)"; CHC="$OUTC/chart"; mkdir -p "$CHC/templates/zoo" "$CHC/templates/papi"
+printf 'apiVersion: v2\nname: runwhen-platform\nversion: 0.2.61\n' > "$CHC/Chart.yaml"
+# brand-new subsystem dir + brand-new feature discriminator (not in capabilities.baseline)
+printf '{{- if eq .Values.zoo.mode "safari" }}\nkind: ConfigMap\n{{- end }}\n' > "$CHC/templates/zoo/cm.yaml"
+# papi IS a baselined subsystem — must NOT be flagged
+printf 'kind: Service\n' > "$CHC/templates/papi/svc.yaml"
+bash "$DET" --chart "$CHC" --out "$OUTC" >/dev/null 2>&1
+grep -q $'\tcoverageGap\t.*dir:zoo' "$OUTC/findings.tsv" && ok "new subsystem dir:zoo flagged as coverageGap" || no "dir:zoo not flagged"
+grep -q $'\tcoverageGap\t.*disc:zoo.mode=safari' "$OUTC/findings.tsv" && ok "new discriminator disc:zoo.mode=safari flagged" || no "disc:zoo.mode=safari not flagged"
+grep -q $'\tcoverageGap\t.*dir:papi' "$OUTC/findings.tsv" && no "baselined dir:papi wrongly flagged" || ok "baselined subsystem not re-flagged"
+rm -rf "$OUTC"
+
+echo "== coverage: extractor captures default + comparison literals and the template dir =="
+OUTE="$(mktemp -d)"; mkdir -p "$OUTE/t/gw"
+# the exact Gateway-API guard shape: eq (.Values.ingress.type | default "ingress") "gateway"
+printf '{{- if eq (.Values.ingress.type | default "ingress") "gateway" }}\nkind: Gateway\n{{- end }}\n' > "$OUTE/t/gw/g.yaml"
+caps="$(ruby "$SKILL/extract-capabilities.rb" "$OUTE/t")"
+echo "$caps" | grep -qx 'disc:ingress.type=gateway' && ok "extractor captures the comparison literal (=gateway)" || no "comparison literal missing"
+echo "$caps" | grep -qx 'disc:ingress.type=ingress' && ok "extractor captures the default-branch literal (=ingress)" || no "default literal missing"
+echo "$caps" | grep -qx 'dir:gw' && ok "extractor captures the template subsystem dir" || no "template dir missing"
+rm -rf "$OUTE"
+
+echo "== coverage: shipped baseline is clean against itself (no spurious gaps) =="
+OUTB="$(mktemp -d)"; CHB="$OUTB/chart"; mkdir -p "$CHB/templates"
+printf 'apiVersion: v2\nname: runwhen-platform\nversion: 0.2.61\n' > "$CHB/Chart.yaml"
+# rebuild a chart-templates tree from the baseline's own dir:/disc: entries, so the
+# extract exactly reproduces the baseline -> zero coverageGap expected.
+while IFS= read -r e; do
+  case "$e" in
+    dir:*) mkdir -p "$CHB/templates/${e#dir:}" ;;
+    disc:*) kv="${e#disc:}"; p="${kv%=*}"; v="${kv##*=}";
+            printf '{{- if eq .Values.%s "%s" }}{{- end }}\n' "$p" "$v" >> "$CHB/templates/_disc.tpl" ;;
+  esac
+done < "$SKILL/capabilities.baseline"
+bash "$DET" --chart "$CHB" --out "$OUTB" >/dev/null 2>&1
+gaps="$(grep -c $'\tcoverageGap\t' "$OUTB/findings.tsv")"
+[ "$gaps" = "0" ] && ok "no coverageGap when the chart surface equals the baseline" || no "spurious coverageGap ($gaps) against own baseline"
+rm -rf "$OUTB"
+
 echo ""; echo "detect-drift: $PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

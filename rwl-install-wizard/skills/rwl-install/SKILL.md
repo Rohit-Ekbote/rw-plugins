@@ -12,7 +12,7 @@ triggers:
 
 Generate-only. **Never** run `helm install`/`helm upgrade`, `kubectl`, or any
 command that contacts a cluster. The wizard never runs `helm`; the pre-flight
-render gate is emitted as a command in PREREQUISITES.md. **Never** ask for,
+render gate is emitted as a command in PREREQUISITES.html. **Never** ask for,
 echo, or store a secret (password, token, key, PAT, kubeconfig, cert material).
 Secrets are wired by name (`existingSecret`/`*Ref`) only.
 
@@ -25,7 +25,7 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
 
 ## State + output (in `$PWD`)
 - Profile: `.claude/rwl-install-profile.yaml` (the ONLY state; secret-free)
-- Kit: `rwl-install-out/{values-*.yaml, USER-GUIDE.md, DEBUG-GUIDE.md, PREREQUISITES.md}`
+- Kit: `rwl-install-out/{values-*.yaml, index.html, USER-GUIDE.html, DEBUG-GUIDE.html, PREREQUISITES.html}`
 
 ## Flow
 
@@ -62,9 +62,9 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
      exactly what is blocked and stop that axis. (This is why the kit never ships
      a guessed ingress class or registry host.)
    - **dependsOn.** If an axis or option documents a `dependsOn`/appliesWhen
-     precondition (e.g. the ingress-snippets axis applies only when cluster-shape
-     is an Ingress option, not Gateway API), skip it when the precondition is
-     unmet and note the auto-skip to the operator.
+     precondition (e.g. the ingress-snippets axis applies only when routing-mode
+     is `ingressRouting`, not the Gateway API options), skip it when the
+     precondition is unmet and note the auto-skip to the operator.
    - **Multi-select axes.** If the axis declares `multiSelect: true`, present it
      with the AskUserQuestion tool in multi-select mode: the operator may pick
      any combination of its options, or none. Such an axis has **no `none`
@@ -93,53 +93,41 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
       `rw.example.com`). Deep-merge fragments per overlay file. Write only
       overlays that received content. Prepend each overlay with a header:
       chartCompat, generatedAt, and the axis answers that produced it.
-   2. Collect the de-duplicated union of `guide_sections` ids → assemble
-      `USER-GUIDE.md` in INSTALL-CHECKLIST Phase 0→10 order, with command blocks
-      that name the generated overlays in `-f` flags and substitute the
-      operator's domain/namespace. Secret creation appears only as
-      `kubectl create secret ... <PLACEHOLDER>` templates.
-      - **`-f` lists name only overlays that were actually written.** Compose
-        every `helm` command from the files present in `rwl-install-out/`, in the
-        order values.yaml → values-registry → values-storage → values-cluster →
-        values-posture. Never emit a `-f values-<x>.yaml` for an overlay this run
-        did not generate (e.g. no `values-posture.yaml` unless a posture/RBAC axis
-        produced it).
-      - **Never emit a dangling placeholder.** If an optional free-value param was
-        left blank (e.g. `helmMirrorUrl`), OMIT the guide block that depends on it
-        rather than rendering the literal `<TOKEN>`. Substitute a param only when
-        the operator supplied it; otherwise drop the block and keep the fallback
-        prose the guide section provides for the blank case.
-   3. Collect the de-duplicated union of `known_issues` ids → assemble
-      `DEBUG-GUIDE.md` from the matching `data/known-issues/<id>.md` files.
-   4. Assemble `rwl-install-out/PREREQUISITES.md` (ALWAYS written). It has:
-      - A header: the targeted chart range (`chartCompat`), `generatedAt` (today),
-        and the apply order (values.yaml → values-registry → values-storage →
-        values-cluster → values-posture, naming only overlays this run produced).
-      - The de-duplicated union of `prereqs:` ids across every answered option →
-        concatenate the matching `data/prerequisites/<id>.md` fragments, in catalog
-        order. Include a fragment at most once. If no option carried a `prereqs:`
-        id, still write the header + render gate below.
-      - A final "Pre-flight render gate" section — a copy-paste command block the
-        OPERATOR runs (the wizard never runs it). Build it with an EXPLICIT `-f`
-        per generated overlay, in apply order, using the operator's release name:
+   2. **Build the HTML docs** — run the deterministic assembler AFTER the overlays
+      are written (do NOT hand-assemble the guides; the script guarantees identical
+      chrome across runs and always writes all three guides):
 
-            helm template <RELEASE> <chart> \
-              -f <chart>/values.yaml \
-              -f rwl-install-out/values-registry.yaml \
-              -f rwl-install-out/values-storage.yaml \
-              -f rwl-install-out/values-cluster.yaml \
-              -f rwl-install-out/values-posture.yaml \
-              | kubectl apply --dry-run=client -f -
+          ruby ${CLAUDE_PLUGIN_ROOT}/lib/build-guide.rb \
+            --catalog ${CLAUDE_PLUGIN_ROOT}/data/knob-catalog.yaml \
+            --profile .claude/rwl-install-profile.yaml \
+            --data ${CLAUDE_PLUGIN_ROOT}/data \
+            --out rwl-install-out
 
-        List ONLY the overlays that exist in `rwl-install-out/`. Each overlay is a
-        separate `-f` argument on its own line — never join them into one string.
-   5. Both guides end with a short "verify it's running / when you're stuck"
-      pointer (checklist Phases 6/8); note that live-cluster debugging is out of
-      scope for this wizard.
-   6. **Offline sanity check.** Confirm each generated `values-*.yaml` parses as
-      YAML. Do NOT run `helm` — the plugin never invokes helm. The render check is
-      emitted as the copy-paste command in PREREQUISITES.md for the operator to run.
-      Report the YAML-parse result in the summary.
+      It reads the profile + catalog + `data/*.md` fragments (converting them to
+      HTML) and writes four self-contained, offline HTML files into
+      `rwl-install-out/`, each command block carrying a **Copy** button:
+      - **`index.html`** — landing page: links to the guides + the overlays this
+        run generated.
+      - **`USER-GUIDE.html`** — the de-duplicated union of the selected options'
+        `guide_sections` (catalog order), with the composed `helm` command whose
+        `-f` list names ONLY the overlays that actually landed in
+        `rwl-install-out/`, in apply order (values.yaml → values-registry →
+        values-storage → values-cluster → values-posture).
+      - **`DEBUG-GUIDE.html`** — the union of `known_issues`.
+      - **`PREREQUISITES.html`** — the union of `prereqs` plus a pre-flight
+        render-gate command (`helm template … | kubectl apply --dry-run=client`)
+        the OPERATOR runs; the wizard never runs it.
+      - **All three guides are ALWAYS written, each with a fallback body** when its
+        content union is empty — the assembler enforces this, so you never skip one.
+      - The assembler substitutes only tokens the wizard knows (answered `params`,
+        `CHART_COMPAT`). Install-time / illustrative fills (`<RELEASE>`,
+        `<CHART_REF>`, `<NAMESPACE>`, lowercase `<domain>`) and secret placeholders
+        (`<PLACEHOLDER>`) stay verbatim. Secret VALUES are never substituted.
+   3. **Offline sanity check.** Confirm each generated `values-*.yaml` parses as
+      YAML and that `build-guide.rb` wrote the four HTML files. Do NOT run `helm` —
+      the plugin never invokes helm. The render check is emitted as the copy-paste
+      command in `PREREQUISITES.html` for the operator to run. Report the results
+      in the summary.
 
 6. **Secret-guard gate.** Run
    `bash ${CLAUDE_PLUGIN_ROOT}/lib/secret-guard.sh .claude/rwl-install-profile.yaml rwl-install-out`.
@@ -147,15 +135,15 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
    operator exactly which file/line tripped it, and stop — do not present a kit
    that contains secret-shaped content.
 
-7. **Summary.** Print which overlays + guides were written and the first command
-   from the user guide. Point the operator at `PREREQUISITES.md` and its
-   pre-flight render-gate command before installing. Suggest `/rwl-install-show`
-   to review.
+7. **Summary.** Print which overlays + HTML docs were written and the first command
+   from the user guide. Point the operator at `index.html` / `PREREQUISITES.html`
+   and its pre-flight render-gate command before installing. Suggest
+   `/rwl-install-show` to review.
 
 ## Hard rules
 - Generate-only. No cluster contact and NO helm at all: never run
   `helm install`/`helm upgrade`/`helm template`, `kubectl`, or anything that
   reaches a cluster. The pre-flight render gate is emitted as a command in
-  PREREQUISITES.md for the operator to run — the wizard itself never invokes helm.
+  PREREQUISITES.html for the operator to run — the wizard itself never invokes helm.
 - Secret-free. No secret is ever requested, echoed, or written.
 - Output is a pure function of (profile + catalog): always regenerate wholesale.

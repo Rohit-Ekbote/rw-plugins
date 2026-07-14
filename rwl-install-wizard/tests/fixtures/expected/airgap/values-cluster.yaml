@@ -6,6 +6,7 @@ global:
   domain: airgap.example.com
 ingress:
   enabled: true
+  type: ingress
   className: ingress-nginx
   allowSnippetAnnotations: true
   tls:

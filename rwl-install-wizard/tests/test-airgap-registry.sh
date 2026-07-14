@@ -176,6 +176,43 @@ if command -v helm >/dev/null 2>&1 && [ -f "$CHART/Chart.yaml" ]; then
   else
     no "[1/4/5] STOXX hardened combo FAILED to render: $(head -1 "$TMP.err")"
   fi
+  echo "== RENDER (oracle): Gateway API routing — chart-managed Gateway (routing-mode axis) =="
+  # The routing-mode split makes gatewayClassRouting emit ingress.type=gateway +
+  # gateway.gatewayClassName. Assert the chart renders a Gateway carrying the
+  # operator's GatewayClass, HTTPRoutes, and NO Ingress objects — the exact
+  # behavior the old gatewayApi stub (global.domain only) failed to produce.
+  # llmGateway.deploy:false lives in the overlay (a valid operator config), NOT as
+  # a --set crutch, per the render-verbatim rule above.
+  GWOV="$(mktemp)"
+  cat > "$GWOV" <<'YML'
+global:
+  domain: rw.example.com
+ingress:
+  enabled: true
+  type: gateway
+  gateway:
+    gatewayClassName: test-gwclass
+llmGateway:
+  deploy: false
+# Satisfy the unrelated seaweedfs identities invariant (MISSED-2) for this
+# non-rw release, exactly as a real kit's storage overlay does — keeps this
+# render focused on routing, not object storage.
+seaweedfs:
+  s3:
+    existingConfigSecret: rw-gw-seaweedfs-identities
+YML
+  if helm template rw-gw "$CHART" -f "$CHART/values.yaml" -f "$GWOV" >"$TMP" 2>"$TMP.err"; then
+    gwok=1
+    grep -qE '^kind: Gateway$' "$TMP" || gwok=0
+    grep -q 'gatewayClassName: "test-gwclass"' "$TMP" || gwok=0   # operator input reaches the Gateway
+    grep -qE '^kind: HTTPRoute$' "$TMP" || gwok=0
+    grep -qE '^kind: Ingress$' "$TMP" && gwok=0                    # gateway mode leaves no Ingress
+    [ "$gwok" = 1 ] && ok "gatewayClassRouting: Gateway(gatewayClassName)+HTTPRoutes render, no Ingress" \
+                    || no "gatewayClassRouting: gateway render missing Gateway/HTTPRoute or leaked Ingress"
+  else
+    no "gatewayClassRouting FAILED to render: $(head -1 "$TMP.err")"
+  fi
+  rm -f "$GWOV"
   rm -f "$TMP" "$TMP.err"
 else
   echo "  SKIP: chart not found at \$RWL_CHART_PATH ($CHART) — static checks only"

@@ -63,7 +63,7 @@ for target in "$@"; do
             files="$files
 $f"
         done <<EOF
-$(find "$target" -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.md' \))
+$(find "$target" -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.md' -o -name '*.html' \))
 EOF
     else
         files="$files

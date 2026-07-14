@@ -3,6 +3,7 @@ global:
   domain: stoxx.example.com
 ingress:
   enabled: true
+  type: ingress
   className: nginx
   allowSnippetAnnotations: false
   tls:

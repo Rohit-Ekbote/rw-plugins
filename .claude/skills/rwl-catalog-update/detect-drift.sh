@@ -72,6 +72,25 @@ check_fails() {
   done
 }
 
+# check_coverage — the class the render check is blind to: a NEW chart capability
+# the catalog does not model yet. `helm template` of the EXISTING options stays
+# green when the chart grows a whole new feature (e.g. Gateway API added
+# `ingress.type=gateway` + a `templates/gateway/` dir in 0.2.58), so no render/
+# validator/fail finding fires. Extract the chart's capability surface (feature
+# discriminators + template subsystems) and diff it against capabilities.baseline
+# — a "seen as of chart X" snapshot, exactly like validators.baseline. Anything new
+# is a coverage gap: model it in the catalog, or (if intentionally not modeled)
+# regenerate/extend the baseline to acknowledge it.
+check_coverage() {
+  local tdir="$CHART/templates"; [ -d "$tdir" ] || return 0
+  local baseline="$SKILL_DIR/capabilities.baseline"
+  ruby "$SKILL_DIR/extract-capabilities.rb" "$tdir" | sort -u > "$OUT/capabilities.chart"
+  comm -13 <(sort -u "$baseline" 2>/dev/null) "$OUT/capabilities.chart" | while IFS= read -r cap; do
+    [ -n "$cap" ] || continue
+    emit_finding decide coverageGap "" "unmodeled chart capability '$cap' — new since capabilities.baseline; model it in the catalog or add it to the baseline" "$tdir" "" "$cap"
+  done
+}
+
 # Read catalog pinnedTags via ruby (neo4j/vault/bciBaseHelmTest -> version string).
 catalog_pinned() {
   ruby -ryaml -e '
@@ -159,6 +178,7 @@ check_render() {
 check_chartcompat
 check_validators
 check_fails
+check_coverage
 check_tags
 check_render
 ruby "$SKILL_DIR/assemble-report.rb" "$FINDINGS" "$OUT"
