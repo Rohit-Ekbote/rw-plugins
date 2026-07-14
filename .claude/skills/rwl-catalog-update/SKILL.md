@@ -40,6 +40,19 @@ NEVER commits — you review the diff and commit.
    - `kind: render` — an option no longer renders. Likely a renamed/removed key; propose the mapping from the chart, or propose deprecating the option.
    - `kind: publicRef` — an option leaks a public ref against this chart; propose the per-upstream override that fixes it.
    - `kind: chartCompat` (decide bucket) — the chart version is OUTSIDE the catalog's `chartCompat` range. Do NOT bump the range as a reflex: first reconcile all other drift and confirm the verification gate (step 4) is green, THEN widen `chartCompat:` in `knob-catalog.yaml` (and its header note) to include the new version — that assertion means "the catalog now supports this chart."
+   - `kind: coverageGap` — a NEW chart capability the catalog does not model yet
+     (the class the render check is blind to). The `chart` field is the capability
+     signal: `disc:<valuesPath>=<literal>` (a feature/mode switch, e.g.
+     `disc:ingress.type=gateway`) or `dir:<name>` (a new `templates/<name>/`
+     subsystem). Investigate what the capability does in the chart
+     (`values.yaml`/`values-example-*.yaml`/the template), then EITHER model it —
+     a new option/axis whose `emits` produce that value, approved like any
+     structural change (this is exactly how Gateway API's `routing-mode` axis was
+     added) — OR, if it is intentionally out of scope, acknowledge it by
+     regenerating the baseline from the updated chart:
+     `ruby .claude/skills/rwl-catalog-update/extract-capabilities.rb <chart>/templates > .claude/skills/rwl-catalog-update/capabilities.baseline`
+     (rather than hand-editing — the baseline is a full snapshot). Structural
+     changes are maintainer-approved; never auto-model.
 
 4. **Verify (gate — must be green before you present):**
    - `bash rwl-install-wizard/lib/catalog-lint.sh rwl-install-wizard/data/knob-catalog.yaml rwl-install-wizard/data`
@@ -53,6 +66,16 @@ NEVER commits — you review the diff and commit.
 `check_render` renders each option in isolation with dummy values; a green render
 does NOT mean the option is install-safe. Before trusting a "no drift" result,
 reason about these classes by hand (each learned from the 0.2.59 STOXX failure):
+
+- **Unmodeled NEW capabilities.** The render check only validates options the
+  catalog ALREADY has; a brand-new chart feature the catalog doesn't model
+  produces no render/validator/fail finding at all (Gateway API's
+  `ingress.type=gateway` + `templates/gateway/` shipped in 0.2.58 entirely
+  invisibly). `check_coverage` now surfaces these as `kind: coverageGap` by
+  diffing the chart's capability surface (feature discriminators + template
+  subsystems) against `capabilities.baseline`. It only catches capabilities added
+  AFTER the baseline snapshot — so when you re-seed the baseline for a new chart,
+  skim the full extract for existing-but-unmodeled switches too.
 
 - **Inline `{{ fail }}` invariants.** `check_fails` now surfaces *new* ones as
   `kind: fail` findings — but you must still model each into the catalog (or
