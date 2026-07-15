@@ -13,6 +13,34 @@ SeaweedFS (object storage, covered by the `object-storage` axis separately):
 
 Source: `Chart.yaml` lines 39–68.
 
+**Workstation prep — vendor the subcharts before install (REQUIRED).** The
+`runwhen-platform` chart is thin: some or all of these subcharts are not present
+in its `charts/` directory as shipped. A `helm template`/`helm install` fails
+with `found in Chart.yaml, but missing in charts/ directory: neo4j, vault` (or
+similar) until you vendor them on the install workstation:
+
+```bash
+# Re-resolve from your registered Helm chart-repo aliases and rewrite Chart.lock:
+helm dependency update ./runwhen-platform
+# OR vendor exactly what the existing Chart.lock already pins (no re-resolve):
+helm dependency build ./runwhen-platform
+```
+
+Use `update` for a first install or when you point aliases at your own chart repo
+(air-gap); `build` is fine when `Chart.lock` is already correct and you only need
+the tarballs pulled. Verify all six appear:
+
+```bash
+ls ./runwhen-platform/charts/   # postgresql redis neo4j vault qdrant seaweedfs
+```
+
+> **Air-gap:** the mirror must hold **every** bundled subchart's images — including
+> `neo4j` and `vault`, which are easy to miss because they are `deploy: true` by
+> default. Their image tags are pinned in `values-registry.yaml`; reconcile them
+> against your resolved `Chart.lock` (see the chart-version section). Chart-repo
+> alias registration for the air-gap case is covered in the subchart alias
+> mirroring section.
+
 **PostgreSQL mode selector.** The chart has three PG backends:
 `kind: spilo` (default, production — Patroni + WAL-G, no CRDs),
 `kind: bundled` (bitnami subchart, dev/lab only, single pod, no HA, no backups — see known issues),

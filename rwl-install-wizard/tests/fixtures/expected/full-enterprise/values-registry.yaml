@@ -6,8 +6,8 @@ x-airgap-pinned-tags-notice:
     must hold the exact tag your chart resolves, or the image pull fails. These full-value
     overrides beat the chart's own resolved subchart pins.
   pinnedTags:
-    neo4j: 5.26.0
-    vault: 1.21.2
+    neo4j: 5.26.28
+    vault: 2.0.3
     bciBaseHelmTest: '15.7'
 global:
   imagePullSecrets:
@@ -79,14 +79,14 @@ redis:
     repository: bitnamilegacy/redis
 neo4j:
   image:
-    customImage: jcr.example.com/docker-dockerhub/library/neo4j:5.26.0
+    customImage: jcr.example.com/docker-dockerhub/library/neo4j:5.26.28
     imagePullSecrets:
     - jcr-pull-secret
 vault:
   server:
     image:
       repository: jcr.example.com/docker-dockerhub/hashicorp/vault
-      tag: 1.21.2
+      tag: 2.0.3
   autoUnseal:
     image:
       registry: jcr.example.com/docker-dockerhub

@@ -225,8 +225,8 @@ axes:
               the image pull fails. These full-value overrides beat the chart's own
               resolved subchart pins.
             pinnedTags:
-              neo4j: "5.26.0"
-              vault: "1.21.2"
+              neo4j: "5.26.28"
+              vault: "2.0.3"
               bciBaseHelmTest: "15.7"
           # Per-upstream, path-preserving. NO registryOverride — each image keeps
           # its source path under the matching per-upstream remote, so the rendered
@@ -316,15 +316,19 @@ axes:
             # without it; the real air-gap install sets it (helmrelease.yaml:297).
             disableLookups: true
             image:
-              customImage: "<REGISTRY_HOST>/docker-dockerhub/library/neo4j:5.26.0"   # PINNED-TAG 5.26.0 — see x-airgap-pinned-tags-notice
+              customImage: "<REGISTRY_HOST>/docker-dockerhub/library/neo4j:5.26.28"   # PINNED-TAG 5.26.28 — see x-airgap-pinned-tags-notice
               imagePullSecrets:
                 - "<PULL_SECRET_NAME>"
           vault:
-            server:                      # docker.io/hashicorp/vault (subchart server; full-path repository)
+            server:                      # docker.io/hashicorp/vault (subchart 0.34.0 server; full-path repository)
               image:
                 repository: "<REGISTRY_HOST>/docker-dockerhub/hashicorp/vault"
-                tag: "1.21.2"            # PINNED-TAG 1.21.2 — see x-airgap-pinned-tags-notice
-            autoUnseal:                  # chart-native jobs, docker.io/hashicorp/vault
+                tag: "2.0.3"            # PINNED-TAG 2.0.3 — subchart 0.34.0 server default; see x-airgap-pinned-tags-notice
+            # autoUnseal/backup (and global.utility.vaultClient) are the chart's own
+            # vault-binary jobs, pinned to hashicorp/vault:1.21.2 in the parent chart
+            # for cache locality — they re-point registry only and INHERIT that 1.21.2
+            # tag, so the mirror must hold BOTH 2.0.3 (server) and 1.21.2 (these jobs).
+            autoUnseal:                  # chart-native jobs, docker.io/hashicorp/vault:1.21.2
               image:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"
             backup:
@@ -631,6 +635,16 @@ axes:
         label: "Bundled SeaweedFS — Apache 2.0, namespace-scoped, no CRDs (default)"
         overlay: values-storage.yaml
         emits:
+          # MISSED-2b: pin the chart fullname to the declared release name so the
+          # SeaweedFS identities Secret (`<fullname>-seaweedfs-identities`) is
+          # stable regardless of the `helm install <RELEASE>` name the operator
+          # actually types. Without this the kit is hard-coupled to release name
+          # == <RELEASE_NAME>: installing under any other name makes the chart
+          # derive a different expected secret name than existingConfigSecret pins
+          # below, and runwhen.objectStorage.validate fail-fasts at template time.
+          # In the intended path (release name == <RELEASE_NAME>) this is a no-op
+          # on resource names.
+          fullnameOverride: "<RELEASE_NAME>"
           objectStorage:
             kind: seaweedfs
           seaweedfs:
@@ -638,7 +652,9 @@ axes:
             s3:
               # MISSED-2: chart's runwhen.objectStorage.validate requires this to
               # equal `<release>-seaweedfs-identities` (the identities Secret the
-              # chart renders). Wrong/blank → template fail-fast.
+              # chart renders). Wrong/blank → template fail-fast. With the
+              # fullnameOverride above, `<release>` resolves to <RELEASE_NAME>
+              # regardless of the actual helm release name.
               existingConfigSecret: "<RELEASE_NAME>-seaweedfs-identities"
         guide_sections: [object-storage-seaweedfs]
         known_issues: [seaweedfs-s3-access-denied]

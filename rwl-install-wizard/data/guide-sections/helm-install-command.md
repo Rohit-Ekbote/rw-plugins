@@ -27,6 +27,11 @@ helm upgrade --install <RELEASE> <CHART_REF> \
   <one -f line per generated overlay, in the order above>
 ```
 
+- `<RELEASE>` is your helm release name. If you selected bundled SeaweedFS object
+  storage, the kit pinned `fullnameOverride: <RELEASE_NAME>` in
+  `values-storage.yaml`, so any release name installs cleanly (the SeaweedFS
+  identities Secret name stays fixed). If you removed that pin, you MUST install
+  under exactly `<RELEASE_NAME>` or the object-storage validation fail-fasts.
 - `<CHART_REF>` is the local path (`./runwhen-platform`, after `helm pull … --untar`
   + `helm dependency update`) or the OCI ref
   (`oci://<REGISTRY_HOST>/.../charts/runwhen-platform --version <CHART_VERSION>`).

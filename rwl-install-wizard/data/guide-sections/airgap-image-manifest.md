@@ -45,12 +45,13 @@ ghcr.io/runwhen-contrib/cortex-tenant:2026-05-20.1
 ghcr.io/berriai/litellm-non_root:v1.88.2
 ghcr.io/zalando/spilo-17:4.0-p2
 docker.io/library/busybox:1.36
+docker.io/hashicorp/vault:2.0.3
 docker.io/hashicorp/vault:1.21.2
 docker.io/bitnamilegacy/redis:8.2.1-debian-12-r0
 docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4
 docker.io/grafana/mimir:2.14.0
 docker.io/qdrant/qdrant:v1.18.0
-docker.io/library/neo4j:5.26.0
+docker.io/library/neo4j:5.26.28
 docker.io/chrislusf/seaweedfs:4.25
 docker.io/edoburu/pgbouncer:v1.24.1-p1
 # helm-test-only (qdrant test pod) — mirror ONLY if you run `helm test`:
@@ -65,11 +66,15 @@ registry.suse.com/bci/bci-base:15.7
 > dated tag and keep `listRemoteFolderItems` enabled on the ghcr remote.
 
 > **Canonical source for the overlay's hard-pinned tags.** Three tags in this
-> baseline — `library/neo4j:5.26.0`, `hashicorp/vault:1.21.2`, and
-> `bci/bci-base:15.7` — are also emitted as full-value overrides in
+> baseline — `library/neo4j:5.26.28`, `hashicorp/vault:2.0.3` (the subchart
+> server), and `bci/bci-base:15.7` — are also emitted as full-value overrides in
 > `values-registry.yaml` (and restated in its `x-airgap-pinned-tags-notice`
 > block). This baseline is the single source of truth for those three; if you
-> change one here, change it in the overlay too. The wizard's regression guard
+> change one here, change it in the overlay too. The second vault line,
+> `hashicorp/vault:1.21.2`, is the chart's own vault-binary jobs
+> (init/auto-unseal/backup) — NOT an overlay override; the overlay re-points its
+> registry only, so it inherits that tag from the chart and the mirror must hold
+> both vault tags. The wizard's regression guard
 > asserts the two stay identical, so they cannot silently drift.
 
 #### 3. Copy each image to the mirror — PER-UPSTREAM, path-preserving (skopeo)
@@ -126,7 +131,7 @@ digest in your overlay so the cluster only ever runs the bytes you scanned:
 
 ```bash
 # Resolve digests once, after mirroring (against the per-upstream target path):
-crane digest <REGISTRY_HOST>/docker-dockerhub/library/neo4j:5.26.0
+crane digest <REGISTRY_HOST>/docker-dockerhub/library/neo4j:5.26.28
 #   sha256:abc123...
 ```
 
