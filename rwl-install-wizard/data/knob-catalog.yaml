@@ -631,6 +631,16 @@ axes:
         label: "Bundled SeaweedFS — Apache 2.0, namespace-scoped, no CRDs (default)"
         overlay: values-storage.yaml
         emits:
+          # MISSED-2b: pin the chart fullname to the declared release name so the
+          # SeaweedFS identities Secret (`<fullname>-seaweedfs-identities`) is
+          # stable regardless of the `helm install <RELEASE>` name the operator
+          # actually types. Without this the kit is hard-coupled to release name
+          # == <RELEASE_NAME>: installing under any other name makes the chart
+          # derive a different expected secret name than existingConfigSecret pins
+          # below, and runwhen.objectStorage.validate fail-fasts at template time.
+          # In the intended path (release name == <RELEASE_NAME>) this is a no-op
+          # on resource names.
+          fullnameOverride: "<RELEASE_NAME>"
           objectStorage:
             kind: seaweedfs
           seaweedfs:
@@ -638,7 +648,9 @@ axes:
             s3:
               # MISSED-2: chart's runwhen.objectStorage.validate requires this to
               # equal `<release>-seaweedfs-identities` (the identities Secret the
-              # chart renders). Wrong/blank → template fail-fast.
+              # chart renders). Wrong/blank → template fail-fast. With the
+              # fullnameOverride above, `<release>` resolves to <RELEASE_NAME>
+              # regardless of the actual helm release name.
               existingConfigSecret: "<RELEASE_NAME>-seaweedfs-identities"
         guide_sections: [object-storage-seaweedfs]
         known_issues: [seaweedfs-s3-access-denied]
