@@ -22,14 +22,15 @@ subchart versions — they move independently of the parent chart version):
 
 | Subchart | Image | Tag pinned here |
 |---|---|---|
-| Neo4j | `library/neo4j` | `5.26.0` (hard-pinned in `values-registry.yaml`) |
-| Vault (server) | `hashicorp/vault` | `1.21.2` (hard-pinned in `values-registry.yaml`) |
+| Neo4j | `library/neo4j` | `5.26.28` (hard-pinned in `values-registry.yaml`) |
+| Vault (server) | `hashicorp/vault` | `2.0.3` (hard-pinned in `values-registry.yaml`) |
+| Vault (init/unseal/backup) | `hashicorp/vault` | `1.21.2` (chart-inherited; registry re-pointed only) |
 | Qdrant (helm test) | `bci/bci-base` | `15.7` (hard-pinned; helm-test pod only) |
 | Qdrant | `qdrant/qdrant` | chart default (`v1.18.0`) |
 | Redis | `bitnamilegacy/redis` | chart default |
 | SeaweedFS | `chrislusf/seaweedfs` | chart default |
 
-The three **hard-pinned** tags above (`neo4j 5.26.0`, `vault 1.21.2`,
+The three **hard-pinned** tags above (`neo4j 5.26.28`, `vault 2.0.3`,
 `bci-base 15.7`) are full-value overrides that beat the chart's own resolved
 subchart pins — `values-registry.yaml` carries an `x-airgap-pinned-tags-notice`
 block restating them next to a "verify against your Chart.lock" warning. They
