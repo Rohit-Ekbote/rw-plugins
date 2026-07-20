@@ -65,6 +65,13 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
      precondition (e.g. the ingress-snippets axis applies only when routing-mode
      is `ingressRouting`, not the Gateway API options), skip it when the
      precondition is unmet and note the auto-skip to the operator.
+   - **Registry layout (mechanism).** `registry-routing` now picks LAYOUT: ask
+     concretely "do ALL images sit under one prefix / a virtual repository, or a
+     separate repo per upstream source?" One prefix / virtual repo → `flat-mirror`
+     (collect `flatPrefix`; emits `registryOverride` + subchart keys). Per-source →
+     `mirrored-per-upstream`. Never infer the mechanism from the registry vendor —
+     only from this layout answer. If the operator is unsure, route them to their
+     registry admin rather than guessing.
    - **Registry auth (Boundary 1).** The `registry-auth` axis applies ONLY when a
      mirror layout (`flat-mirror` or `mirrored-per-upstream`) was chosen — skip it
      under `connected` and note the auto-skip. `workload-identity` collects no
