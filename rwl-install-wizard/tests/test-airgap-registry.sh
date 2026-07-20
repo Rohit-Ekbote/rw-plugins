@@ -254,6 +254,14 @@ for pair in "cache:$pop_cache" "explicit-mirror:$pop_expl"; do
   else ok "registry-population=$nm is guide-only"; fi
 done
 
+echo "== PREREQS: registry-prerequisites fragment wired + names the private source-GAR repo =="
+PRQ="$PLUGIN_DIR/data/guide-sections/registry-prerequisites.md"
+if [ -f "$PRQ" ]; then
+  grep -q 'docker-runwhen-self-hosted' "$PRQ" && grep -qiE 'RunWhen.*(key|credential)' "$PRQ" && ok "registry-prerequisites names the private RunWhen source-GAR repo + key" || no "registry-prerequisites missing private source-GAR/key callout"
+  grep -q '<REGISTRY_HOST>' "$PRQ" && ok "registry-prerequisites is tokenized on REGISTRY_HOST" || no "registry-prerequisites not tokenized"
+else no "registry-prerequisites fragment missing"; fi
+grep -q 'registry-prerequisites' "$CATALOG" && ok "registry-prerequisites referenced by catalog" || no "registry-prerequisites not referenced"
+
 echo ""
 echo "airgap-registry: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

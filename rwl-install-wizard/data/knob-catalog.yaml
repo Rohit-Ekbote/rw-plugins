@@ -387,7 +387,7 @@ axes:
               watchAllBranches: true
               imageRegistry: "<REGISTRY_HOST>/docker-ghcr/runwhen-contrib"
               imageRepo: rw-workspace-utils
-        guide_sections: [registry-jfrog-per-upstream, subchart-alias-mirroring, airgap-image-manifest, chart-version, secret-preflight-checklist, helm-install-command]
+        guide_sections: [registry-prerequisites, registry-jfrog-per-upstream, subchart-alias-mirroring, airgap-image-manifest, chart-version, secret-preflight-checklist, helm-install-command]
         known_issues: [hardcoded-image-refs, embedder-airgap-hang, thin-chart-subchart-aliases, seaweedfs-image-chrislusf]
         prereqs: [registry-access]
 
