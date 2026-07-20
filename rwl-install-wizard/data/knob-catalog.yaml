@@ -429,6 +429,27 @@ axes:
         guide_sections: [registry-auth-pull-secret]
         known_issues: []
 
+  - id: registry-population
+    title: Registry population (Boundary 2)
+    # dependsOn: applies only when a mirror layout is chosen. Guide-only — no emit.
+    # The image MANIFEST lives on the layout option (airgap-image-manifest for
+    # per-source, airgap-image-manifest-flat for flat); this axis only frames what
+    # the operator must DO with it.
+    question: "How is your registry populated with the images? Pull-through cache (remote/proxy repos load images lazily on first pull — the registry needs egress to the upstreams), or explicit mirror (every image is pushed ahead of time to local/standard repos — true air-gap)?"
+    options:
+      - id: cache
+        label: "Pull-through cache — remote/proxy repos; registry has upstream egress; nothing to push"
+        overlay: values-registry.yaml
+        emits: {}
+        guide_sections: [registry-population-cache]
+        known_issues: []
+      - id: explicit-mirror
+        label: "Explicit mirror — local/standard repos; every image pushed ahead of time (air-gap)"
+        overlay: values-registry.yaml
+        emits: {}
+        guide_sections: [registry-population-explicit]
+        known_issues: []
+
   - id: storage-persistence
     title: Persistence tier
     question: "How should rebuildable components (Mimir, Neo4j, Redis) and SeaweedFS persist their data?"

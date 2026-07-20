@@ -242,6 +242,18 @@ else
   echo "  SKIP: chart not found at \$RWL_CHART_PATH ($CHART) — static checks only"
 fi
 
+echo "== POPULATION: registry-population axis exists, guide-only =="
+if grep -q 'id: registry-population' "$CATALOG"; then ok "registry-population axis present"; else no "registry-population axis missing"; fi
+pop_cache="$(option_block cache)"; pop_expl="$(option_block explicit-mirror)"
+for pair in "cache:$pop_cache" "explicit-mirror:$pop_expl"; do
+  nm="${pair%%:*}"; blk="${pair#*:}"
+  # emits: {} (inline empty map) is guide-only; a bare "emits:" line opens a
+  # multi-line block of real emitted keys and must not appear here.
+  if printf '%s' "$blk" | nocomment /dev/stdin | grep -qE '^[[:space:]]*emits:[[:space:]]*$'; then
+    no "registry-population=$nm must not emit values"
+  else ok "registry-population=$nm is guide-only"; fi
+done
+
 echo ""
 echo "airgap-registry: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
