@@ -38,6 +38,13 @@ B="$(build_kit "$FIX/profiles/airgap.yaml" values-registry.yaml values-storage.y
 det=1; for f in $FILES; do diff -q "$A/$f" "$B/$f" >/dev/null 2>&1 || det=0; done
 [ "$det" = 1 ] && ok "two runs are byte-identical (predictable uniformity)" || no "output differs across runs"
 
+echo "== build-guide: multi-line bullet continuations join into <li> (md_to_html) =="
+# helm-install-command.md's <RELEASE> bullet wraps across several indented lines;
+# its continuation must render inside the <li>, not leak as a stray <p>.
+if grep -q '<p>storage, the kit pinned' "$A/USER-GUIDE.html"; then
+  no "multi-line bullet continuation leaked as a stray <p>"
+else ok "multi-line bullet continuation joined into its <li>"; fi
+
 echo "== build-guide: every command block has a copy button =="
 cmds=$(grep -o 'class="cmd"' "$A"/*.html | wc -l | tr -d ' ')
 copies=$(grep -o 'class="copy"' "$A"/*.html | wc -l | tr -d ' ')

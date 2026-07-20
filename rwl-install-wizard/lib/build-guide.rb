@@ -264,13 +264,30 @@ def md_to_html(md)
       next
     end
 
+    # A continuation line wraps the current list item: indented, non-blank, and not
+    # itself the start of another block (new bullet / ordered item / fenced code).
+    # Such lines are joined into the item so multi-line bullets render as one <li>
+    # instead of leaking their tail as a stray <p>.
+    is_continuation = lambda do |ln|
+      ln =~ /\A\s+\S/ && ln !~ /\A\s*[-*]\s+/ && ln !~ /\A\s*\d+\.\s+/ && ln !~ /\A\s*```/
+    end
+    collect_item = lambda do |first|
+      item = first
+      while i < lines.size && is_continuation.call(lines[i])
+        item = "#{item.rstrip} #{lines[i].strip}"
+        i += 1
+      end
+      item
+    end
+
     # unordered list
     if line =~ /\A[-*]\s+(.*)\z/
       flush_para.call
       items = []
       while i < lines.size && lines[i] =~ /\A[-*]\s+(.*)\z/
-        items << $1
+        first = $1
         i += 1
+        items << collect_item.call(first)
       end
       out << "<ul>\n" + items.map { |it| "<li>#{inline(it.strip)}</li>" }.join("\n") + "\n</ul>"
       next
@@ -281,8 +298,9 @@ def md_to_html(md)
       flush_para.call
       items = []
       while i < lines.size && lines[i] =~ /\A\d+\.\s+(.*)\z/
-        items << $1
+        first = $1
         i += 1
+        items << collect_item.call(first)
       end
       out << "<ol>\n" + items.map { |it| "<li>#{inline(it.strip)}</li>" }.join("\n") + "\n</ol>"
       next
