@@ -7,6 +7,8 @@ answers:
   registry-routing:
     option: mirrored-per-upstream
     registryHost: jcr.example.com
+  registry-auth:
+    option: pull-secret
     pullSecretName: jcr-pull-secret
   security-posture:
     option: hardened

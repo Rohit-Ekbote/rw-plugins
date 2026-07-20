@@ -66,6 +66,21 @@ nocomment(){ grep -vE '^[[:space:]]*#' "$1"; }
 if nocomment "$CATALOG" | grep -qE 'registryOverride[[:space:]]*:'; then no "catalog still emits a registryOverride key"; else ok "catalog never emits registryOverride"; fi
 if nocomment "$REG" | grep -qE 'registryOverride[[:space:]]*:'; then no "values-registry.yaml sets registryOverride"; else ok "values-registry.yaml has no registryOverride"; fi
 
+echo "== AUTH: registry-auth axis owns pull-secret keys =="
+# The pull-secret keys must NO LONGER be inline on the layout option; they live on
+# registry-auth=pull-secret. The layout option must not carry pullSecrets itself.
+layout_block="$(option_block mirrored-per-upstream | nocomment /dev/stdin)"
+if printf '%s' "$layout_block" | grep -qE 'pullSecrets|dockerconfigjsonSecret|imagePullSecrets'; then
+  no "mirrored-per-upstream still carries pull-secret keys inline (should move to registry-auth)"
+else ok "mirrored-per-upstream carries no pull-secret keys"; fi
+authps_block="$(option_block pull-secret | nocomment /dev/stdin)"
+for k in "images:" "pullSecrets:" "imagePullSecrets:" "dockerconfigjsonSecret:"; do
+  if printf '%s' "$authps_block" | grep -qF "$k"; then ok "registry-auth=pull-secret emits $k"; else no "registry-auth=pull-secret missing $k"; fi
+done
+authwi_block="$(option_block workload-identity | nocomment /dev/stdin)"
+if printf '%s' "$authwi_block" | grep -qE 'pullSecrets|imagePullSecrets|dockerconfigjsonSecret'; then
+  no "workload-identity emits pull-secret keys (must be secret-free)"; else ok "workload-identity is secret-free"; fi
+
 echo "== MISSED-1: overlays keep every image on the mirror (per-upstream paths) =="
 no_public "$REG" "values-registry.yaml"
 for ref in \

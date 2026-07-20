@@ -8,14 +8,6 @@ or pods stay in `CreateContainerConfigError` / fail upstream auth.
 Create each Secret you were asked to name (only the templates whose feature you
 enabled apply — fill in the redacted values yourself):
 
-- [ ] **Image pull Secret** — `<PULL_SECRET_NAME>` (registry mirror). The
-      `--docker-server` must be the mirror **host only** — no scheme, no path:
-      ```bash
-      kubectl -n <NAMESPACE> create secret docker-registry <PULL_SECRET_NAME> \
-        --docker-server=<REGISTRY_HOST_ONLY> \
-        --docker-username='<user>' \
-        --docker-password='<token>'
-      ```
 - [ ] **TLS Secret** — `<TLS_SECRET>` (BYO wildcard cert; only when you chose the
       bring-your-own-TLS option):
       ```bash
@@ -52,7 +44,7 @@ Verify presence before installing (names should all resolve):
 
 ```bash
 kubectl -n <NAMESPACE> get secret \
-  <PULL_SECRET_NAME> <TLS_SECRET> <CA_BUNDLE_SECRET> \
+  <TLS_SECRET> <CA_BUNDLE_SECRET> \
   <S3_EXISTING_SECRET> <LLM_API_KEY_SECRET> <SLACK_SECRET_NAME> 2>/dev/null
 ```
 

@@ -210,7 +210,6 @@ axes:
         overlay: values-registry.yaml
         params:
           - { id: registryHost, prompt: "Mirror registry host (e.g. artifactory.corp.example or jcr.example.com). The per-upstream repo segments below (docker-dockerhub, docker-ghcr, docker-runwhen-self-hosted, docker-suse) are the remote-repo names you created on the mirror — rename them here if your mirror uses different ones.", required: true }
-          - { id: pullSecretName, prompt: "Name of the pre-created Kubernetes image pull Secret (e.g. jcr-pull-secret)" }
           - { id: helmMirrorUrl, prompt: "Helm CHART repo base URL for the five subchart aliases — a Helm chart repository, NOT the image path above (Artifactory serves charts from a helm-type repo, e.g. https://jcr.example.com/artifactory/helm-virtual; Harbor under /chartrepo/<project> — both distinct from the docker-* image remotes). Leave blank if you mirror only images (charts registered manually)." }
         emits:
           # N1: this warning is injected as a YAML value (not a comment, which
@@ -232,8 +231,6 @@ axes:
           # its source path under the matching per-upstream remote, so the rendered
           # ref equals the manifest push target (airgap-image-manifest.md).
           global:
-            imagePullSecrets:
-              - name: "<PULL_SECRET_NAME>"
             utility:
               busybox:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"
@@ -242,8 +239,6 @@ axes:
               vaultClient:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"
           images:
-            pullSecrets:
-              - name: "<PULL_SECRET_NAME>"
             registry: "<REGISTRY_HOST>/docker-runwhen-self-hosted/runwhen-self-hosted/platform-images"
             mcpServer:
               registry: "<REGISTRY_HOST>/docker-ghcr/runwhen-contrib"
@@ -258,8 +253,6 @@ axes:
           # tags. Reuse the kubelet image pull Secret (kubernetes.io/dockerconfigjson);
           # chart projects it in and exports CC_CATALOG_DOCKERCONFIGJSON_FILE.
           ccCatalog:
-            auth:
-              dockerconfigjsonSecret: "<PULL_SECRET_NAME>"
             # The chart-default cc-catalog sources point image_registry at public
             # ghcr.io/runwhen-contrib — in air-gap the runner then can't pull task
             # images. Repoint each at the mirror (git_url stays upstream, matching
@@ -310,15 +303,14 @@ axes:
               registry: "<REGISTRY_HOST>/docker-dockerhub"
               repository: "bitnamilegacy/redis"
           neo4j:                         # docker.io/library/neo4j (full-path customImage)
-            # MISSED-10: with image.imagePullSecrets set (below), the neo4j subchart
-            # aborts at TEMPLATE + install time ("Missing imageCredential entry for
-            # <secret>") unless disableLookups is true. REQUIRED — render fails
+            # MISSED-10: when registry-auth=pull-secret also sets neo4j.image's pull
+            # secret list, the neo4j subchart aborts at TEMPLATE + install time
+            # ("Missing imageCredential entry for <secret>") unless disableLookups is
+            # true. REQUIRED here regardless of the auth axis choice — render fails
             # without it; the real air-gap install sets it (helmrelease.yaml:297).
             disableLookups: true
             image:
               customImage: "<REGISTRY_HOST>/docker-dockerhub/library/neo4j:5.26.28"   # PINNED-TAG 5.26.28 — see x-airgap-pinned-tags-notice
-              imagePullSecrets:
-                - "<PULL_SECRET_NAME>"
           vault:
             server:                      # docker.io/hashicorp/vault (subchart 0.34.0 server; full-path repository)
               image:
@@ -342,8 +334,6 @@ axes:
             disableLookups: true
             image:
               repository: "<REGISTRY_HOST>/docker-dockerhub/qdrant/qdrant"
-            imagePullSecrets:
-              - name: "<PULL_SECRET_NAME>"
             chartTests:                  # registry.suse.com/bci/bci-base — helm-test-only pod (docker-suse remote)
               dbInteraction:
                 image: "<REGISTRY_HOST>/docker-suse/bci/bci-base:15.7"   # PINNED-TAG 15.7 — see x-airgap-pinned-tags-notice
@@ -400,6 +390,44 @@ axes:
         guide_sections: [registry-jfrog-per-upstream, subchart-alias-mirroring, airgap-image-manifest, chart-version, secret-preflight-checklist, helm-install-command]
         known_issues: [hardcoded-image-refs, embedder-airgap-hang, thin-chart-subchart-aliases, seaweedfs-image-chrislusf]
         prereqs: [registry-access]
+
+  - id: registry-auth
+    title: Registry pull authentication (Boundary 1)
+    # dependsOn: applies only when a mirror layout is chosen (flat-mirror or
+    # mirrored-per-upstream), NOT connected. SKILL skips this axis under connected.
+    question: "How do cluster nodes authenticate to your registry to PULL images? On GKE with a node/Workload-Identity SA that has artifactregistry.reader, no pull secret is needed. Otherwise a dockerconfigjson image pull Secret is required."
+    options:
+      - id: workload-identity
+        label: "Workload Identity / node-SA — GKE node or WI SA has artifactregistry.reader; NO pull secret"
+        overlay: values-registry.yaml
+        emits: {}
+        guide_sections: [registry-auth-workload-identity]
+        known_issues: []
+      - id: pull-secret
+        label: "Pull Secret — a pre-created dockerconfigjson Secret (JFrog/Harbor/ECR/private GAR without WI)"
+        overlay: values-registry.yaml
+        params:
+          - { id: pullSecretName, prompt: "Name of the pre-created Kubernetes image pull Secret (kubernetes.io/dockerconfigjson) in the release namespace (e.g. jcr-pull-secret).", required: true }
+        emits:
+          global:
+            imagePullSecrets:
+              - name: "<PULL_SECRET_NAME>"
+          images:
+            pullSecrets:
+              - name: "<PULL_SECRET_NAME>"
+          ccCatalog:
+            auth:
+              dockerconfigjsonSecret: "<PULL_SECRET_NAME>"
+          neo4j:
+            image:
+              imagePullSecrets:
+                - "<PULL_SECRET_NAME>"
+          qdrant:
+            image:
+              imagePullSecrets:
+                - name: "<PULL_SECRET_NAME>"
+        guide_sections: [registry-auth-pull-secret]
+        known_issues: []
 
   - id: storage-persistence
     title: Persistence tier

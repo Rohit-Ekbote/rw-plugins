@@ -81,6 +81,11 @@ grep -q 'No option-specific cluster prerequisites' "$E/PREREQUISITES.html" \
 grep -q 'No guided install sections' "$E/USER-GUIDE.html" && ok "USER-GUIDE has fallback body when no sections apply" \
   || no "USER-GUIDE missing fallback body"
 
+echo "== registry-auth WI profile: no pull-secret guidance, WI section present =="
+W="$(build_kit "$FIX/profiles/airgap-wi.yaml" values-registry.yaml)"
+if grep -qi 'Workload Identity' "$W/USER-GUIDE.html"; then ok "WI profile renders the Workload-Identity guidance"; else no "WI profile missing Workload-Identity section"; fi
+if grep -qiE 'create secret docker-registry|PULL_SECRET_NAME' "$W/USER-GUIDE.html"; then no "WI profile still shows pull-secret creation guidance (should be omitted)"; else ok "WI profile omits pull-secret creation guidance"; fi
+
 echo "== build-guide: HTML is valid enough — doctype + closed body/html =="
 head -1 "$A/index.html" | grep -qi '<!doctype html>' && grep -q '</html>' "$A/index.html" \
   && ok "index.html has doctype and closes" || no "index.html malformed"
