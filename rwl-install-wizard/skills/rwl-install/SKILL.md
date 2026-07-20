@@ -71,6 +71,11 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
      param and emits nothing (secret-free); `pull-secret` requires `pullSecretName`
      (hard re-prompt — required). Default to `pull-secret` for non-GKE registries;
      offer `workload-identity` when the target is GKE + GAR.
+   - **Registry population (Boundary 2).** The `registry-population` axis also
+     applies only when a mirror layout was chosen — skip under `connected`. It emits
+     no values; it selects the runbook framing (`cache` = admin maps remote repos
+     once, nothing to push; `explicit-mirror` = every image pushed ahead of time).
+     It does NOT change overlay keys.
    - **Multi-select axes.** If the axis declares `multiSelect: true`, present it
      with the AskUserQuestion tool in multi-select mode: the operator may pick
      any combination of its options, or none. Such an axis has **no `none`
