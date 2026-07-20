@@ -242,7 +242,7 @@ axes:
                   name: "<FLAT_PREFIX>/chrislusf/seaweedfs"
             image:
               repository: "<FLAT_PREFIX>/chrislusf/seaweedfs"
-        guide_sections: [registry-prerequisites, airgap-image-manifest-flat, chart-version, helm-install-command]
+        guide_sections: [registry-prerequisites-flat, airgap-image-manifest-flat, chart-version, helm-install-command]
         known_issues: [hardcoded-image-refs, embedder-airgap-hang, thin-chart-subchart-aliases, seaweedfs-image-chrislusf]
 
       # NOTE (v0.1.3, MISSED-1; re-added in a later revision as `flat-mirror`

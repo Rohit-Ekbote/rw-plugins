@@ -121,6 +121,10 @@ def substitution_map
     end
   end
   m['CHART_COMPAT'] = CHART_COMPAT unless CHART_COMPAT.empty?
+  # Flat-mirror answers only flatPrefix; the shared registry guide fragments are
+  # tokenized on <REGISTRY_HOST>. Alias it so flat kits render the flat prefix
+  # instead of leaking the literal token. (REGISTRY_HOST_ONLY then derives below.)
+  m['REGISTRY_HOST'] ||= m['FLAT_PREFIX'] if m['FLAT_PREFIX']
   if m['REGISTRY_HOST']
     m['REGISTRY_HOST_ONLY'] = m['REGISTRY_HOST'].split('/').first
   end

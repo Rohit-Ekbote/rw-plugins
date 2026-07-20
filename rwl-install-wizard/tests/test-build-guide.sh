@@ -86,6 +86,11 @@ W="$(build_kit "$FIX/profiles/airgap-wi.yaml" values-registry.yaml)"
 if grep -qi 'Workload Identity' "$W/USER-GUIDE.html"; then ok "WI profile renders the Workload-Identity guidance"; else no "WI profile missing Workload-Identity section"; fi
 if grep -qiE 'create secret docker-registry|PULL_SECRET_NAME' "$W/USER-GUIDE.html"; then no "WI profile still shows pull-secret creation guidance (should be omitted)"; else ok "WI profile omits pull-secret creation guidance"; fi
 
+echo "== flat-mirror profile: flat prefix resolved, no registry token leak =="
+FL="$(build_kit "$FIX/profiles/flat-mirror.yaml" values-registry.yaml)"
+if grep -qiE '&lt;(REGISTRY_HOST|REGISTRY_HOST_ONLY|FLAT_PREFIX)' "$FL"/*.html; then no "flat kit leaks an unresolved registry token"; else ok "flat kit resolves all registry tokens"; fi
+if grep -q 'flatreg.example.com/rw-virtual' "$FL/USER-GUIDE.html"; then ok "flat kit shows the flat prefix"; else no "flat kit missing the flat prefix value"; fi
+
 echo "== build-guide: HTML is valid enough — doctype + closed body/html =="
 head -1 "$A/index.html" | grep -qi '<!doctype html>' && grep -q '</html>' "$A/index.html" \
   && ok "index.html has doctype and closes" || no "index.html malformed"
