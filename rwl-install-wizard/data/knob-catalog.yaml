@@ -193,18 +193,75 @@ axes:
         guide_sections: [registry-connected, chart-version, helm-install-command]
         known_issues: []
 
-      # NOTE (v0.1.3, MISSED-1): the former `flat-mirror` option (top-level
-      # `registryOverride`) was REMOVED. The chart's `runwhen.image` /
-      # `runwhen.postgresql.spilo.image` helpers apply registryOverride FIRST
+      - id: flat-mirror
+        label: "Flat mirror — ONE prefix / virtual repository fronts every image (GAR/JFrog virtual repo). Uses registryOverride."
+        overlay: values-registry.yaml
+        params:
+          - { id: flatPrefix, prompt: "The single flat prefix (host + path) that fronts every image, e.g. us-central1-docker.pkg.dev/acme/rw-virtual or a JFrog virtual repo. If you actually have a separate repo per upstream source, choose the per-upstream option instead.", required: true }
+        emits:
+          x-airgap-pinned-tags-notice:
+            warning: >-
+              PINNED subchart image tags in this overlay target chart ~0.2.x. VERIFY
+              each against your Chart.lock and the FLAT air-gap image manifest in your
+              USER-GUIDE before installing — the registry must hold the exact tag your
+              chart resolves, or the image pull fails.
+            pinnedTags:
+              neo4j: "5.26.28"
+              vault: "2.0.3"
+              bciBaseHelmTest: "15.7"
+          # FLAT layout: registryOverride reaches first-party + utility + wrapper
+          # subcharts (flattened). The pure subcharts below still need explicit keys.
+          registryOverride: "<FLAT_PREFIX>"
+          neo4j:
+            disableLookups: true
+            image:
+              customImage: "<FLAT_PREFIX>/library/neo4j:5.26.28"   # PINNED-TAG 5.26.28
+          vault:
+            server:
+              image:
+                repository: "<FLAT_PREFIX>/hashicorp/vault"
+                tag: "2.0.3"            # PINNED-TAG 2.0.3 (subchart server); aux stays 1.21.2 (inherited)
+          redis:
+            image:
+              registry: "<FLAT_PREFIX>"
+              repository: "bitnamilegacy/redis"
+          qdrant:
+            disableLookups: true
+            image:
+              repository: "<FLAT_PREFIX>/qdrant/qdrant"
+            chartTests:
+              dbInteraction:
+                image: "<FLAT_PREFIX>/bci/bci-base:15.7"   # PINNED-TAG 15.7
+          metricstore:
+            image:
+              registry: "<FLAT_PREFIX>"
+          seaweedfs:
+            global:
+              seaweedfs:
+                image:
+                  name: "<FLAT_PREFIX>/chrislusf/seaweedfs"
+            image:
+              repository: "<FLAT_PREFIX>/chrislusf/seaweedfs"
+        guide_sections: [registry-prerequisites, airgap-image-manifest-flat, chart-version, helm-install-command]
+        known_issues: [hardcoded-image-refs, embedder-airgap-hang, thin-chart-subchart-aliases, seaweedfs-image-chrislusf]
+
+      # NOTE (v0.1.3, MISSED-1; re-added in a later revision as `flat-mirror`
+      # above): a top-level-only `registryOverride` (no subchart keys) was
+      # REMOVED. The chart's `runwhen.image` / `runwhen.postgresql.spilo.image`
+      # helpers apply registryOverride FIRST
       # (`$regOverride | default .service.registry | default .global.registry`),
-      # so it collapses every image to `<mirror>/<repository>` — dropping the
-      # source path AND silently discarding per-subchart `image.registry`
-      # overrides — while the image manifest pushes to `<mirror>/<source-path>`.
-      # Overlay and manifest then disagree → ImagePullBackOff. The real air-gap
-      # install (infra-flux .../airgap/runwhen-platform/helmrelease.yaml) uses the
-      # per-upstream, path-preserving model below and NEVER sets registryOverride.
-      # See the chart's own `runwhen.image` doc block: "For COMPLEX registry
-      # layouts ... DO NOT set registryOverride."
+      # so it collapses every FIRST-PARTY image to `<mirror>/<repository>` —
+      # dropping the source path AND silently discarding per-subchart
+      # `image.registry` overrides — while the image manifest pushes to
+      # `<mirror>/<source-path>`. Overlay and manifest disagree →
+      # ImagePullBackOff. The `flat-mirror` option above fixes this by pairing
+      # registryOverride with explicit path-preserving keys for every PURE
+      # subchart (neo4j/vault-server/redis/qdrant/seaweedfs/bci) and its own
+      # flat image manifest (airgap-image-manifest-flat.md) so overlay and
+      # manifest agree. The per-upstream, path-preserving model below is the
+      # RECOMMENDED alternative and NEVER sets registryOverride. See the
+      # chart's own `runwhen.image` doc block: "For COMPLEX registry layouts
+      # ... DO NOT set registryOverride [without per-subchart keys]."
       - id: mirrored-per-upstream
         label: "Air-gap mirror — per-upstream repos, path-preserving (JFrog/Artifactory/JCR, Harbor proxy projects, ECR pull-through). RECOMMENDED for air-gap."
         overlay: values-registry.yaml

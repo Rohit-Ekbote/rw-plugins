@@ -57,14 +57,27 @@ no_public() {   # no_public <file> <label>
     no "$2 leaks a public registry host"; else ok "$2 has no public registry host"; fi
 }
 
-echo "== MISSED-1: registryOverride removed / per-upstream model =="
-if grep -q 'id: flat-mirror' "$CATALOG"; then no "flat-mirror option still present (registryOverride footgun)"; else ok "flat-mirror option removed"; fi
-if grep -q 'id: mirrored-per-upstream' "$CATALOG"; then ok "mirrored-per-upstream option present"; else no "mirrored-per-upstream option missing"; fi
 # Match the emitted KEY only (strip comment lines first — the removal rationale
 # legitimately names registryOverride in prose).
 nocomment(){ grep -vE '^[[:space:]]*#' "$1"; }
-if nocomment "$CATALOG" | grep -qE 'registryOverride[[:space:]]*:'; then no "catalog still emits a registryOverride key"; else ok "catalog never emits registryOverride"; fi
-if nocomment "$REG" | grep -qE 'registryOverride[[:space:]]*:'; then no "values-registry.yaml sets registryOverride"; else ok "values-registry.yaml has no registryOverride"; fi
+
+echo "== MISSED-1 (revised): per-source overlays never use registryOverride; flat does, with its own manifest =="
+if grep -q 'id: mirrored-per-upstream' "$CATALOG"; then ok "mirrored-per-upstream option present"; else no "mirrored-per-upstream option missing"; fi
+# Per-source is still path-preserving and must NEVER set registryOverride.
+persrc="$(option_block mirrored-per-upstream)"
+if printf '%s' "$persrc" | grep -qE 'registryOverride[[:space:]]*:'; then no "mirrored-per-upstream must not set registryOverride"; else ok "mirrored-per-upstream never sets registryOverride"; fi
+if nocomment "$REG" | grep -qE 'registryOverride[[:space:]]*:'; then no "per-source fixture values-registry.yaml sets registryOverride"; else ok "per-source fixture has no registryOverride"; fi
+# Flat is now a supported layout and MUST pair registryOverride with its flat manifest.
+flat="$(option_block flat-mirror | grep -vE '^[[:space:]]*#')"
+if printf '%s' "$flat" | grep -qE 'registryOverride[[:space:]]*:'; then ok "flat-mirror uses registryOverride (expected for flat layout)"; else no "flat-mirror missing registryOverride"; fi
+if printf '%s' "$flat" | grep -q 'airgap-image-manifest-flat'; then ok "flat-mirror references the flat image manifest"; else no "flat-mirror must reference airgap-image-manifest-flat (MISSED-1 guard: no flat overlay without a flat manifest)"; fi
+
+echo "== FLAT: fixture is fully on the flat prefix, no public host =="
+FLATREG="$SCRIPT_DIR/fixtures/expected/flat/values-registry.yaml"
+if [ -f "$FLATREG" ]; then
+  if grep -nE "$PUBLIC_HOSTS" "$FLATREG" | grep -vE 'git_url|repoUrl|github\.com' >/dev/null; then no "flat fixture leaks a public host"; else ok "flat fixture has no public host"; fi
+  grep -qE 'registryOverride: "?flatreg\.example/rw-virtual"?' "$FLATREG" && ok "flat fixture sets registryOverride" || no "flat fixture missing registryOverride"
+else no "flat fixture missing"; fi
 
 echo "== AUTH: registry-auth axis owns pull-secret keys =="
 # The pull-secret keys must NO LONGER be inline on the layout option; they live on
@@ -261,6 +274,14 @@ if [ -f "$PRQ" ]; then
   grep -q '<REGISTRY_HOST>' "$PRQ" && ok "registry-prerequisites is tokenized on REGISTRY_HOST" || no "registry-prerequisites not tokenized"
 else no "registry-prerequisites fragment missing"; fi
 grep -q 'registry-prerequisites' "$CATALOG" && ok "registry-prerequisites referenced by catalog" || no "registry-prerequisites not referenced"
+
+echo "== FLAT: flat-mirror option renders every image on the flat prefix =="
+if grep -q 'id: flat-mirror' "$CATALOG"; then ok "flat-mirror option present"; else no "flat-mirror option missing"; fi
+flat="$(option_block flat-mirror | grep -vE '^[[:space:]]*#')"
+printf '%s' "$flat" | grep -qE 'registryOverride:\s*"<FLAT_PREFIX>"' && ok "flat-mirror sets registryOverride token" || no "flat-mirror missing registryOverride"
+for sub in "redis" "neo4j" "vault" "qdrant" "seaweedfs" "metricstore"; do
+  printf '%s' "$flat" | grep -q "$sub" && ok "flat-mirror emits $sub subchart key" || no "flat-mirror missing $sub subchart key"
+done
 
 echo ""
 echo "airgap-registry: $PASS passed, $FAIL failed"
