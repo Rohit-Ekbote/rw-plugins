@@ -81,6 +81,15 @@ authwi_block="$(option_block workload-identity | nocomment /dev/stdin)"
 if printf '%s' "$authwi_block" | grep -qE 'pullSecrets|imagePullSecrets|dockerconfigjsonSecret'; then
   no "workload-identity emits pull-secret keys (must be secret-free)"; else ok "workload-identity is secret-free"; fi
 
+echo "== AUTH: workload-identity fixture is secret-free but fully mirrored =="
+WIREG="$SCRIPT_DIR/fixtures/expected/wi-persource/values-registry.yaml"
+if [ -f "$WIREG" ]; then
+  no_public "$WIREG" "wi-persource values-registry.yaml"
+  if grep -vE '^[[:space:]]*#' "$WIREG" | grep -qE 'pullSecrets|imagePullSecrets|dockerconfigjsonSecret'; then
+    no "wi-persource overlay contains pull-secret keys (must be secret-free)"; else ok "wi-persource overlay is secret-free"; fi
+  if grep -q 'disableLookups: true' "$WIREG"; then ok "wi-persource keeps neo4j disableLookups (MISSED-10)"; else no "wi-persource dropped neo4j disableLookups"; fi
+else no "wi-persource fixture missing"; fi
+
 echo "== MISSED-1: overlays keep every image on the mirror (per-upstream paths) =="
 no_public "$REG" "values-registry.yaml"
 for ref in \
