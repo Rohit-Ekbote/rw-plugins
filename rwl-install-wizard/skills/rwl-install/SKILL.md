@@ -65,6 +65,12 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
      precondition (e.g. the ingress-snippets axis applies only when routing-mode
      is `ingressRouting`, not the Gateway API options), skip it when the
      precondition is unmet and note the auto-skip to the operator.
+   - **Registry auth (Boundary 1).** The `registry-auth` axis applies ONLY when a
+     mirror layout (`flat-mirror` or `mirrored-per-upstream`) was chosen — skip it
+     under `connected` and note the auto-skip. `workload-identity` collects no
+     param and emits nothing (secret-free); `pull-secret` requires `pullSecretName`
+     (hard re-prompt — required). Default to `pull-secret` for non-GKE registries;
+     offer `workload-identity` when the target is GKE + GAR.
    - **Multi-select axes.** If the axis declares `multiSelect: true`, present it
      with the AskUserQuestion tool in multi-select mode: the operator may pick
      any combination of its options, or none. Such an axis has **no `none`
