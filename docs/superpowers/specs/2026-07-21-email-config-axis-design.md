@@ -143,8 +143,9 @@ account security (skip verification) — surface that to the operator.
 - **`fromName`** — the chart default ("RunWhen Notifications") is fine; not
   collected.
 - **Disabling all outbound email sends** — `email-disabled` only sets
-  `skipEmailVerification`; with no provider configured the app already skips sends
-  (chart: "empty = emails skipped"). No extra keys needed.
+  `skipEmailVerification`; it configures no provider, so `EMAIL_PROVIDER` falls to
+  the chart default (`mailgun`) and sends are skipped for lack of Mailgun
+  credentials — no empty-provider crash, no extra keys needed.
 
 ## Testing / verification gate
 
