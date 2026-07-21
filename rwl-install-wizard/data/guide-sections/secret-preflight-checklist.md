@@ -32,6 +32,12 @@ enabled apply — fill in the redacted values yourself):
       kubectl -n <NAMESPACE> create secret generic <LLM_API_KEY_SECRET> \
         --from-literal=<LLM_API_KEY_ENV>='<redacted>'
       ```
+- [ ] **SMTP credentials** — `<SMTP_EXISTING_SECRET>` (SMTP email relay only):
+      ```bash
+      kubectl -n <NAMESPACE> create secret generic <SMTP_EXISTING_SECRET> \
+        --from-literal=EMAIL_SMTP_USERNAME='<user>' \
+        --from-literal=EMAIL_SMTP_PASSWORD='<pass>'
+      ```
 - [ ] **Slack credentials** — `<SLACK_SECRET_NAME>` (Slack integration only):
       ```bash
       kubectl -n <NAMESPACE> create secret generic <SLACK_SECRET_NAME> \
@@ -45,7 +51,7 @@ Verify presence before installing (names should all resolve):
 ```bash
 kubectl -n <NAMESPACE> get secret \
   <TLS_SECRET> <CA_BUNDLE_SECRET> \
-  <S3_EXISTING_SECRET> <LLM_API_KEY_SECRET> <SLACK_SECRET_NAME> 2>/dev/null
+  <S3_EXISTING_SECRET> <LLM_API_KEY_SECRET> <SLACK_SECRET_NAME> <SMTP_EXISTING_SECRET> 2>/dev/null
 ```
 
 Managing secrets via SealedSecrets / External Secrets / SOPS / Vault CSI is

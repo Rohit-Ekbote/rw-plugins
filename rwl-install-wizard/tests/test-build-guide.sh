@@ -102,6 +102,18 @@ echo "== build-guide: HTML is valid enough — doctype + closed body/html =="
 head -1 "$A/index.html" | grep -qi '<!doctype html>' && grep -q '</html>' "$A/index.html" \
   && ok "index.html has doctype and closes" || no "index.html malformed"
 
+echo "== email-smtp profile: SMTP secret guidance rendered, no token leak =="
+ES="$(build_kit "$FIX/profiles/email-smtp.yaml" values-cluster.yaml)"
+if grep -qiE '&lt;(SMTP_HOST|SMTP_PORT|SMTP_TLS_MODE|SMTP_EXISTING_SECRET|EMAIL_FROM_ADDRESS)' "$ES"/*.html; then
+  no "email-smtp kit leaks an unresolved token"; else ok "email-smtp kit resolves all email tokens"; fi
+if grep -q 'create secret generic rw-smtp-creds' "$ES/USER-GUIDE.html"; then
+  ok "email-smtp shows the SMTP secret template"; else no "email-smtp missing SMTP secret template"; fi
+
+echo "== email-disabled profile: skip-verification security note rendered =="
+ED="$(build_kit "$FIX/profiles/email-disabled.yaml" values-cluster.yaml)"
+if grep -qiE 'skipEmailVerification|SKIP_EMAIL_VERIFICATION|weakens account security' "$ED/USER-GUIDE.html"; then
+  ok "email-disabled shows the skip/security note"; else no "email-disabled missing skip note"; fi
+
 echo ""
 echo "build-guide: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
