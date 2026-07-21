@@ -12,7 +12,7 @@
     {
       "name": "rwl-install-wizard",
       "description": "Guided installer for the RunWhen platform Helm chart: interview-driven generation of values overlays and tailored install/debug guides",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "source": "./rwl-install-wizard",
       "author": {
         "name": "Rohit Ekbote"
