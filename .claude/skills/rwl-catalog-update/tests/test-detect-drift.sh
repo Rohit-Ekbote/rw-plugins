@@ -65,6 +65,17 @@ if command -v helm >/dev/null 2>&1 && [ -f "$REALCHART/values.yaml" ]; then
   if awk -F'\t' '($2=="render"||$2=="publicRef")&&$3=="internal-openai"' "$OUT4/findings.tsv" | grep -q .; then
     no "internal-openai unexpectedly flagged (gateway render fidelity lost)"
   else ok "internal-openai renders clean with gateway enabled"; fi
+  # registry-auth=pull-secret dependsOn a mirror layout (it omits the layout-owned
+  # neo4j.disableLookups). The render check must layer it on the layout, not render
+  # it alone — otherwise it fails with a MISSED-10-shaped false positive.
+  if awk -F'\t' '$2=="render"&&$3=="pull-secret"' "$OUT4/findings.tsv" | grep -q .; then
+    no "pull-secret flagged render (rendered in isolation, not merged with a layout)"
+  else ok "pull-secret renders clean (layered on its layout partner)"; fi
+  # tag suppression: the chart's values-example lags the resolved subchart, but the
+  # pinned tags ARE what the chart renders, so no tag drift may be flagged.
+  if awk -F'\t' '$2=="tag"' "$OUT4/findings.tsv" | grep -q .; then
+    no "tag drift flagged against current chart (stale-example false positive not suppressed)"
+  else ok "no tag drift against current chart (render-verified pins, stale example suppressed)"; fi
 else
   bash "$DET" --chart "$FIX/chart-compat" --out "$OUT4" >/dev/null 2>&1
   grep -q $'\trenderSkipped\t' "$OUT4/findings.tsv" && ok "render check skips cleanly without chart/helm" || no "no renderSkipped note"
@@ -96,12 +107,12 @@ printf 'apiVersion: v2\nname: runwhen-platform\nversion: 0.2.54\n' > "$CHB/Chart
 cat > "$CHB/values-example-airgap-jcr.yaml" <<'YML'
 neo4j:
   image:
-    customImage: "h/docker-dockerhub/library/neo4j:5.26.0"
+    customImage: "h/docker-dockerhub/library/neo4j:5.26.28"
 vault:
   server:
     image:
       repository: "h/docker-dockerhub/hashicorp/vault"
-      tag: "1.21.2"
+      tag: "2.0.3"
 YML
 cat > "$CHB/values.yaml" <<'YML'
 qdrant:

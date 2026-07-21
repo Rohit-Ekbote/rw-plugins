@@ -32,6 +32,16 @@ def subst(o, m)
   end
 end
 
+# Deep-merge b onto a (b wins on scalar conflicts), so successive invocations into
+# the same out-dir LAYER their emits into one overlay — mirroring how the real
+# GENERATE composes multiple selected options. Lets the render check render an
+# option that dependsOn another (e.g. registry-auth=pull-secret on top of a layout
+# that owns neo4j.disableLookups) instead of failing on it in isolation.
+def deep_merge(a, b)
+  return b unless a.is_a?(Hash) && b.is_a?(Hash)
+  a.merge(b) { |_k, va, vb| deep_merge(va, vb) }
+end
+
 cat = YAML.load_file(catalog)
 cat["axes"].each do |axis|
   (axis["options"] || []).each do |opt|
@@ -43,7 +53,9 @@ cat["axes"].each do |axis|
     (opt["params"]  || []).each { |p| pids << p["id"] }
     pmap = {}; pids.each { |id| pmap[snake(id)] = dummy(id) }
     data = subst(Marshal.load(Marshal.dump(em)), pmap)
-    File.write(File.join(outdir, ov), data.to_yaml)
+    path = File.join(outdir, ov)
+    data = deep_merge(YAML.load_file(path), data) if File.exist?(path)
+    File.write(path, data.to_yaml)
     puts ov
     if ARGV[3] == "--answers"
       ans = { "option" => want }

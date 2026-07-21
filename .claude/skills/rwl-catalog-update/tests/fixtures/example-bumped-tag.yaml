@@ -5,4 +5,4 @@ vault:
   server:
     image:
       repository: "<host>/docker-dockerhub/hashicorp/vault"
-      tag: "1.21.2"
+      tag: "2.0.3"

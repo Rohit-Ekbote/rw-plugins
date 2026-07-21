@@ -102,6 +102,21 @@ catalog_pinned() {
     }}' "$CATALOG" | sort -u
 }
 
+# Default bundled render — ground truth for the resolved subchart image tags. The
+# chart's values-example-*.yaml can LAG the actual subchart (e.g. it still shows
+# neo4j:5.26.0 while the pinned subchart renders 5.26.28), which produced spurious
+# tag findings that would revert a correct pin. Used only to SUPPRESS such false
+# positives; when a render is unavailable (no helm, or a non-renderable fixture)
+# the example-based comparison stands unchanged.
+render_default() {
+  command -v helm >/dev/null 2>&1 || return 1
+  [ -f "$CHART/values.yaml" ] || return 1
+  helm template rw "$CHART" \
+    --set objectStorage.kind=seaweedfs --set seaweedfs.deploy=true \
+    --set seaweedfs.s3.existingConfigSecret=rw-seaweedfs-identities \
+    --set llmGateway.deploy=false 2>/dev/null
+}
+
 check_tags() {
   local ex="$CHART/values-example-airgap-jcr.yaml"; [ -f "$ex" ] || return 0
   # chart tags for the three pinned images, parsed from the example.
@@ -109,18 +124,24 @@ check_tags() {
   c_neo4j="$(grep -oE 'library/neo4j:[^"[:space:]]+' "$ex" | head -1 | sed 's#.*:##')"
   c_vault="$(awk '/hashicorp\/vault/{f=1} f&&/tag:/{gsub(/[",]/,"",$2);print $2;exit}' "$ex")"
   c_bci="$(grep -v '^[[:space:]]*#' "$CHART/values.yaml" 2>/dev/null | grep -oE 'bci/bci-base:[^"[:space:]]+' | head -1 | sed 's#.*:##')"
+  local rf; rf="$(mktemp)"; render_default > "$rf" 2>/dev/null || : > "$rf"
   catalog_pinned | while IFS="$(printf '\t')" read -r name ver; do
-    local chart_ver=""
+    local chart_ver="" pat=""
     case "$name" in
-      neo4j) chart_ver="$c_neo4j" ;;
-      vault) chart_ver="$c_vault" ;;
-      bciBaseHelmTest) chart_ver="$c_bci" ;;
+      neo4j)           chart_ver="$c_neo4j"; pat='(library/)?neo4j' ;;
+      vault)           chart_ver="$c_vault"; pat='hashicorp/vault' ;;
+      bciBaseHelmTest) chart_ver="$c_bci";   pat='bci/bci-base' ;;
     esac
     [ -n "$chart_ver" ] || continue
-    if [ "$chart_ver" != "$ver" ]; then
-      emit_finding auto tag "$name" "pinned $name tag $ver != chart example $chart_ver" "$ex" "$ver" "$chart_ver"
+    [ "$chart_ver" != "$ver" ] || continue
+    # Suppress: the pinned tag IS what the chart actually renders (stale example).
+    if [ -s "$rf" ] && grep -E '(image|customImage):' "$rf" \
+         | grep -oE "${pat}:[A-Za-z0-9._-]+" | sed 's/.*://' | grep -qx "$ver"; then
+      continue
     fi
+    emit_finding auto tag "$name" "pinned $name tag $ver != chart example $chart_ver" "$ex" "$ver" "$chart_ver"
   done
+  rm -f "$rf"
 }
 
 PUBLIC_HOSTS='us-docker\.pkg\.dev|ghcr\.io|quay\.io|registry-1\.docker\.io|docker\.io|registry\.k8s\.io|registry\.suse\.com'
@@ -131,6 +152,23 @@ list_options() {
       puts o["id"] if o["overlay"] && o["emits"] && o["emits"]!={} }}' "$CATALOG"
 }
 
+axis_of() {
+  ruby -ryaml -e '
+    id=ARGV[1]
+    YAML.load_file(ARGV[0])["axes"].each{|a| (a["options"]||[]).each{|o|
+      if o["id"]==id then puts a["id"]; exit end }}' "$CATALOG" "$1"
+}
+
+# Axes whose options dependsOn a mirror layout (registry-auth / registry-population):
+# in the real interview they are only ever chosen alongside a layout, and they omit
+# layout-owned keys (e.g. neo4j.disableLookups). Rendering them alone is an
+# isolation artifact (a MISSED-10-shaped false positive), so the render check layers
+# them ON TOP of this representative layout. The layout itself is still rendered
+# alone elsewhere in the loop, so a real MISSED-10 regression on the layout (dropping
+# disableLookups) is still caught there.
+LAYOUT_PARTNER="mirrored-per-upstream"
+depends_on_layout() { case "$(axis_of "$1")" in registry-auth|registry-population) return 0 ;; *) return 1 ;; esac }
+
 check_render() {
   if ! command -v helm >/dev/null 2>&1 || [ ! -f "$CHART/values.yaml" ]; then
     emit_finding auto renderSkipped "" "helm or chart values.yaml unavailable — render checks skipped" "$CHART" "" ""
@@ -139,6 +177,11 @@ check_render() {
   local opt tmp ov llm_off
   for opt in $(list_options); do
     tmp="$(mktemp -d)"
+    # A dependent-axis option is layered on top of a representative layout so it
+    # renders as it would in real use (see LAYOUT_PARTNER note above).
+    if depends_on_layout "$opt"; then
+      ruby "$SKILL_DIR/gen-overlays.rb" "$CATALOG" "$tmp" "$LAYOUT_PARTNER" >/dev/null
+    fi
     ov="$(ruby "$SKILL_DIR/gen-overlays.rb" "$CATALOG" "$tmp" "$opt" --answers)"
     [ -n "$ov" ] || { rm -rf "$tmp"; continue; }
     # The chart fail-fasts when llmGateway.deploy=true and models[] is empty — the
