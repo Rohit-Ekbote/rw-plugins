@@ -957,6 +957,42 @@ axes:
         guide_sections: [llm-endpoint, secret-preflight-checklist]
         known_issues: [llm-bootstrap-egress, tiktoken-dns-benign, litellm-configmap-placeholder, embedder-airgap-hang]
 
+  - id: email-config
+    title: Email server
+    question: "Should the platform send email (account verification, notifications) via an SMTP relay, or run without email? Without email, verification is disabled so accounts can be used."
+    options:
+      - id: email-smtp
+        label: "SMTP relay — send email through your SMTP server (verification enforced)"
+        overlay: values-cluster.yaml
+        params:
+          - { id: smtpHost, prompt: "SMTP relay hostname (e.g. smtp.corp.example — the mail server the platform sends through).", required: true }
+          - { id: smtpExistingSecret, prompt: "Name of a pre-created Kubernetes Secret in the release namespace holding EMAIL_SMTP_USERNAME + EMAIL_SMTP_PASSWORD (existingSecret name — not the credentials).", required: true }
+          - { id: smtpPort, prompt: "SMTP port (587 = STARTTLS, 465 = SSL, 25 = none). Default 587." }
+          - { id: smtpTlsMode, prompt: "TLS mode: starttls | ssl | none. Default starttls." }
+          - { id: emailFromAddress, prompt: "Envelope sender address (e.g. noreply@corp.example). Default noreply@runwhen.com." }
+        emits:
+          email:
+            provider: "smtp"          # empty EMAIL_PROVIDER crashes PAPI (see email-empty-provider-crash)
+            fromAddress: "<EMAIL_FROM_ADDRESS>"
+            smtp:
+              host: "<SMTP_HOST>"
+              port: "<SMTP_PORT>"
+              tlsMode: "<SMTP_TLS_MODE>"
+              existingSecret: "<SMTP_EXISTING_SECRET>"
+          papi:
+            skipEmailVerification: "false"
+        guide_sections: [email-smtp, secret-preflight-checklist]
+        known_issues: [email-empty-provider-crash]
+
+      - id: email-disabled
+        label: "No email — disable email verification (accounts sign up / log in without a verified address)"
+        overlay: values-cluster.yaml
+        emits:
+          papi:
+            skipEmailVerification: "true"
+        guide_sections: [email-disabled]
+        known_issues: []
+
   - id: subcharts
     title: Datastore deployment mode
     question: "Should datastores (PostgreSQL, Redis, Neo4j, Vault, Qdrant) run as bundled in-cluster subcharts, or should the platform connect to externally-managed services?"
