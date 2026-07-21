@@ -83,6 +83,14 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
      no values; it selects the runbook framing (`cache` = admin maps remote repos
      once, nothing to push; `explicit-mirror` = every image pushed ahead of time).
      It does NOT change overlay keys.
+   - **Email (email-config).** Single-select. `email-smtp` requires `smtpHost` and
+     `smtpExistingSecret` (hard re-prompt — required); for the default-valued
+     params store the default when the operator accepts it (`smtpPort`=`587`,
+     `smtpTlsMode`=`starttls`, `emailFromAddress`=`noreply@runwhen.com`) — never
+     leave them blank, or their tokens leak into the overlay. `email-disabled`
+     sets `papi.skipEmailVerification: "true"`: tell the operator it weakens
+     account security (unverified-email login) and is for setups where that is
+     acceptable.
    - **Multi-select axes.** If the axis declares `multiSelect: true`, present it
      with the AskUserQuestion tool in multi-select mode: the operator may pick
      any combination of its options, or none. Such an axis has **no `none`
