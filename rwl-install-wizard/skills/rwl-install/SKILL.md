@@ -65,6 +65,32 @@ Secrets are wired by name (`existingSecret`/`*Ref`) only.
      precondition (e.g. the ingress-snippets axis applies only when routing-mode
      is `ingressRouting`, not the Gateway API options), skip it when the
      precondition is unmet and note the auto-skip to the operator.
+   - **Registry layout (mechanism).** `registry-routing` now picks LAYOUT: ask
+     concretely "do ALL images sit under one prefix / a virtual repository, or a
+     separate repo per upstream source?" One prefix / virtual repo → `flat-mirror`
+     (collect `flatPrefix`; emits `registryOverride` + subchart keys). Per-source →
+     `mirrored-per-upstream`. Never infer the mechanism from the registry vendor —
+     only from this layout answer. If the operator is unsure, route them to their
+     registry admin rather than guessing.
+   - **Registry auth (Boundary 1).** The `registry-auth` axis applies ONLY when a
+     mirror layout (`flat-mirror` or `mirrored-per-upstream`) was chosen — skip it
+     under `connected` and note the auto-skip. `workload-identity` collects no
+     param and emits nothing (secret-free); `pull-secret` requires `pullSecretName`
+     (hard re-prompt — required). Default to `pull-secret` for non-GKE registries;
+     offer `workload-identity` when the target is GKE + GAR.
+   - **Registry population (Boundary 2).** The `registry-population` axis also
+     applies only when a mirror layout was chosen — skip under `connected`. It emits
+     no values; it selects the runbook framing (`cache` = admin maps remote repos
+     once, nothing to push; `explicit-mirror` = every image pushed ahead of time).
+     It does NOT change overlay keys.
+   - **Email (email-config).** Single-select. `email-smtp` requires `smtpHost` and
+     `smtpExistingSecret` (hard re-prompt — required); for the default-valued
+     params store the default when the operator accepts it (`smtpPort`=`587`,
+     `smtpTlsMode`=`starttls`, `emailFromAddress`=`noreply@runwhen.com`) — never
+     leave them blank, or their tokens leak into the overlay. `email-disabled`
+     sets `papi.skipEmailVerification: "true"`: tell the operator it weakens
+     account security (unverified-email login) and is for setups where that is
+     acceptable.
    - **Multi-select axes.** If the axis declares `multiSelect: true`, present it
      with the AskUserQuestion tool in multi-select mode: the operator may pick
      any combination of its options, or none. Such an axis has **no `none`

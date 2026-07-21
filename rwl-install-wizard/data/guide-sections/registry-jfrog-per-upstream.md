@@ -20,16 +20,12 @@ x-jcr-anchors:
   jcr-ghcr-berriai: &jcr_ghcr_berriai "<REGISTRY_HOST>/docker-ghcr/berriai"
 
 global:
-  imagePullSecrets:
-    - name: <PULL_SECRET_NAME>
   utility:
     busybox:     { registry: *jcr_dh }
     dbInit:      { registry: *jcr_dh }
     vaultClient: { registry: *jcr_dh }
 
 images:
-  pullSecrets:
-    - name: <PULL_SECRET_NAME>
   registry: *jcr_rwsh          # default for first-party services
   mcpServer:   { registry: *jcr_ghcr_rwc }
   ccCatalog:   { registry: *jcr_ghcr_rwc }
@@ -59,6 +55,8 @@ metricstore:
   image:
     registry: *jcr_dh
 ```
+
+> Pull secrets are added only in pull-secret auth mode (see the registry pull-auth section); Workload-Identity installs omit them.
 
 Subchart images (Vault server, Redis, Neo4j, Qdrant, SeaweedFS) use different
 schema — see `registry-routing.md` Subchart images table for the per-subchart

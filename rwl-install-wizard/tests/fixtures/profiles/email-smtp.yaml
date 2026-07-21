@@ -1,0 +1,13 @@
+schemaVersion: 1
+chartCompat: ">=0.2.37 <0.3"
+generatedAt: "2026-07-21"
+# Minimal profile exercising email-config=email-smtp (defaults stored for the
+# default-valued params, mirroring what the interview persists).
+answers:
+  email-config:
+    option: email-smtp
+    smtpHost: smtp.corp.example
+    smtpExistingSecret: rw-smtp-creds
+    smtpPort: "587"
+    smtpTlsMode: starttls
+    emailFromAddress: noreply@corp.example

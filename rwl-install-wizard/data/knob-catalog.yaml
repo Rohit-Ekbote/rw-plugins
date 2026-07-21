@@ -193,24 +193,80 @@ axes:
         guide_sections: [registry-connected, chart-version, helm-install-command]
         known_issues: []
 
-      # NOTE (v0.1.3, MISSED-1): the former `flat-mirror` option (top-level
-      # `registryOverride`) was REMOVED. The chart's `runwhen.image` /
-      # `runwhen.postgresql.spilo.image` helpers apply registryOverride FIRST
+      - id: flat-mirror
+        label: "Flat mirror — ONE prefix / virtual repository fronts every image (GAR/JFrog virtual repo). Uses registryOverride."
+        overlay: values-registry.yaml
+        params:
+          - { id: flatPrefix, prompt: "The single flat prefix (host + path) that fronts every image, e.g. us-central1-docker.pkg.dev/acme/rw-virtual or a JFrog virtual repo. If you actually have a separate repo per upstream source, choose the per-upstream option instead.", required: true }
+        emits:
+          x-airgap-pinned-tags-notice:
+            warning: >-
+              PINNED subchart image tags in this overlay target chart ~0.2.x. VERIFY
+              each against your Chart.lock and the FLAT air-gap image manifest in your
+              USER-GUIDE before installing — the registry must hold the exact tag your
+              chart resolves, or the image pull fails.
+            pinnedTags:
+              neo4j: "5.26.28"
+              vault: "2.0.3"
+              bciBaseHelmTest: "15.7"
+          # FLAT layout: registryOverride reaches first-party + utility + wrapper
+          # subcharts (flattened). The pure subcharts below still need explicit keys.
+          registryOverride: "<FLAT_PREFIX>"
+          neo4j:
+            disableLookups: true
+            image:
+              customImage: "<FLAT_PREFIX>/library/neo4j:5.26.28"   # PINNED-TAG 5.26.28
+          vault:
+            server:
+              image:
+                repository: "<FLAT_PREFIX>/hashicorp/vault"
+                tag: "2.0.3"            # PINNED-TAG 2.0.3 (subchart server); aux stays 1.21.2 (inherited)
+          redis:
+            image:
+              registry: "<FLAT_PREFIX>"
+              repository: "bitnamilegacy/redis"
+          qdrant:
+            disableLookups: true
+            image:
+              repository: "<FLAT_PREFIX>/qdrant/qdrant"
+            chartTests:
+              dbInteraction:
+                image: "<FLAT_PREFIX>/bci/bci-base:15.7"   # PINNED-TAG 15.7
+          metricstore:
+            image:
+              registry: "<FLAT_PREFIX>"
+          seaweedfs:
+            global:
+              seaweedfs:
+                image:
+                  name: "<FLAT_PREFIX>/chrislusf/seaweedfs"
+            image:
+              repository: "<FLAT_PREFIX>/chrislusf/seaweedfs"
+        guide_sections: [registry-prerequisites-flat, airgap-image-manifest-flat, chart-version, helm-install-command]
+        known_issues: [hardcoded-image-refs, embedder-airgap-hang, thin-chart-subchart-aliases, seaweedfs-image-chrislusf]
+
+      # NOTE (v0.1.3, MISSED-1; re-added in a later revision as `flat-mirror`
+      # above): a top-level-only `registryOverride` (no subchart keys) was
+      # REMOVED. The chart's `runwhen.image` / `runwhen.postgresql.spilo.image`
+      # helpers apply registryOverride FIRST
       # (`$regOverride | default .service.registry | default .global.registry`),
-      # so it collapses every image to `<mirror>/<repository>` — dropping the
-      # source path AND silently discarding per-subchart `image.registry`
-      # overrides — while the image manifest pushes to `<mirror>/<source-path>`.
-      # Overlay and manifest then disagree → ImagePullBackOff. The real air-gap
-      # install (infra-flux .../airgap/runwhen-platform/helmrelease.yaml) uses the
-      # per-upstream, path-preserving model below and NEVER sets registryOverride.
-      # See the chart's own `runwhen.image` doc block: "For COMPLEX registry
-      # layouts ... DO NOT set registryOverride."
+      # so it collapses every FIRST-PARTY image to `<mirror>/<repository>` —
+      # dropping the source path AND silently discarding per-subchart
+      # `image.registry` overrides — while the image manifest pushes to
+      # `<mirror>/<source-path>`. Overlay and manifest disagree →
+      # ImagePullBackOff. The `flat-mirror` option above fixes this by pairing
+      # registryOverride with explicit path-preserving keys for every PURE
+      # subchart (neo4j/vault-server/redis/qdrant/seaweedfs/bci) and its own
+      # flat image manifest (airgap-image-manifest-flat.md) so overlay and
+      # manifest agree. The per-upstream, path-preserving model below is the
+      # RECOMMENDED alternative and NEVER sets registryOverride. See the
+      # chart's own `runwhen.image` doc block: "For COMPLEX registry layouts
+      # ... DO NOT set registryOverride [without per-subchart keys]."
       - id: mirrored-per-upstream
         label: "Air-gap mirror — per-upstream repos, path-preserving (JFrog/Artifactory/JCR, Harbor proxy projects, ECR pull-through). RECOMMENDED for air-gap."
         overlay: values-registry.yaml
         params:
           - { id: registryHost, prompt: "Mirror registry host (e.g. artifactory.corp.example or jcr.example.com). The per-upstream repo segments below (docker-dockerhub, docker-ghcr, docker-runwhen-self-hosted, docker-suse) are the remote-repo names you created on the mirror — rename them here if your mirror uses different ones.", required: true }
-          - { id: pullSecretName, prompt: "Name of the pre-created Kubernetes image pull Secret (e.g. jcr-pull-secret)" }
           - { id: helmMirrorUrl, prompt: "Helm CHART repo base URL for the five subchart aliases — a Helm chart repository, NOT the image path above (Artifactory serves charts from a helm-type repo, e.g. https://jcr.example.com/artifactory/helm-virtual; Harbor under /chartrepo/<project> — both distinct from the docker-* image remotes). Leave blank if you mirror only images (charts registered manually)." }
         emits:
           # N1: this warning is injected as a YAML value (not a comment, which
@@ -232,8 +288,6 @@ axes:
           # its source path under the matching per-upstream remote, so the rendered
           # ref equals the manifest push target (airgap-image-manifest.md).
           global:
-            imagePullSecrets:
-              - name: "<PULL_SECRET_NAME>"
             utility:
               busybox:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"
@@ -242,8 +296,6 @@ axes:
               vaultClient:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"
           images:
-            pullSecrets:
-              - name: "<PULL_SECRET_NAME>"
             registry: "<REGISTRY_HOST>/docker-runwhen-self-hosted/runwhen-self-hosted/platform-images"
             mcpServer:
               registry: "<REGISTRY_HOST>/docker-ghcr/runwhen-contrib"
@@ -258,8 +310,6 @@ axes:
           # tags. Reuse the kubelet image pull Secret (kubernetes.io/dockerconfigjson);
           # chart projects it in and exports CC_CATALOG_DOCKERCONFIGJSON_FILE.
           ccCatalog:
-            auth:
-              dockerconfigjsonSecret: "<PULL_SECRET_NAME>"
             # The chart-default cc-catalog sources point image_registry at public
             # ghcr.io/runwhen-contrib — in air-gap the runner then can't pull task
             # images. Repoint each at the mirror (git_url stays upstream, matching
@@ -310,15 +360,14 @@ axes:
               registry: "<REGISTRY_HOST>/docker-dockerhub"
               repository: "bitnamilegacy/redis"
           neo4j:                         # docker.io/library/neo4j (full-path customImage)
-            # MISSED-10: with image.imagePullSecrets set (below), the neo4j subchart
-            # aborts at TEMPLATE + install time ("Missing imageCredential entry for
-            # <secret>") unless disableLookups is true. REQUIRED — render fails
+            # MISSED-10: when registry-auth=pull-secret also sets neo4j.image's pull
+            # secret list, the neo4j subchart aborts at TEMPLATE + install time
+            # ("Missing imageCredential entry for <secret>") unless disableLookups is
+            # true. REQUIRED here regardless of the auth axis choice — render fails
             # without it; the real air-gap install sets it (helmrelease.yaml:297).
             disableLookups: true
             image:
               customImage: "<REGISTRY_HOST>/docker-dockerhub/library/neo4j:5.26.28"   # PINNED-TAG 5.26.28 — see x-airgap-pinned-tags-notice
-              imagePullSecrets:
-                - "<PULL_SECRET_NAME>"
           vault:
             server:                      # docker.io/hashicorp/vault (subchart 0.34.0 server; full-path repository)
               image:
@@ -342,8 +391,6 @@ axes:
             disableLookups: true
             image:
               repository: "<REGISTRY_HOST>/docker-dockerhub/qdrant/qdrant"
-            imagePullSecrets:
-              - name: "<PULL_SECRET_NAME>"
             chartTests:                  # registry.suse.com/bci/bci-base — helm-test-only pod (docker-suse remote)
               dbInteraction:
                 image: "<REGISTRY_HOST>/docker-suse/bci/bci-base:15.7"   # PINNED-TAG 15.7 — see x-airgap-pinned-tags-notice
@@ -397,9 +444,68 @@ axes:
               watchAllBranches: true
               imageRegistry: "<REGISTRY_HOST>/docker-ghcr/runwhen-contrib"
               imageRepo: rw-workspace-utils
-        guide_sections: [registry-jfrog-per-upstream, subchart-alias-mirroring, airgap-image-manifest, chart-version, secret-preflight-checklist, helm-install-command]
+        guide_sections: [registry-prerequisites, registry-jfrog-per-upstream, subchart-alias-mirroring, airgap-image-manifest, chart-version, secret-preflight-checklist, helm-install-command]
         known_issues: [hardcoded-image-refs, embedder-airgap-hang, thin-chart-subchart-aliases, seaweedfs-image-chrislusf]
         prereqs: [registry-access]
+
+  - id: registry-auth
+    title: Registry pull authentication (Boundary 1)
+    # dependsOn: applies only when a mirror layout is chosen (flat-mirror or
+    # mirrored-per-upstream), NOT connected. SKILL skips this axis under connected.
+    question: "How do cluster nodes authenticate to your registry to PULL images? On GKE with a node/Workload-Identity SA that has artifactregistry.reader, no pull secret is needed. Otherwise a dockerconfigjson image pull Secret is required."
+    options:
+      - id: workload-identity
+        label: "Workload Identity / node-SA — GKE node or WI SA has artifactregistry.reader; NO pull secret"
+        overlay: values-registry.yaml
+        emits: {}
+        guide_sections: [registry-auth-workload-identity]
+        known_issues: []
+      - id: pull-secret
+        label: "Pull Secret — a pre-created dockerconfigjson Secret (JFrog/Harbor/ECR/private GAR without WI)"
+        overlay: values-registry.yaml
+        params:
+          - { id: pullSecretName, prompt: "Name of the pre-created Kubernetes image pull Secret (kubernetes.io/dockerconfigjson) in the release namespace (e.g. jcr-pull-secret).", required: true }
+        emits:
+          global:
+            imagePullSecrets:
+              - name: "<PULL_SECRET_NAME>"
+          images:
+            pullSecrets:
+              - name: "<PULL_SECRET_NAME>"
+          ccCatalog:
+            auth:
+              dockerconfigjsonSecret: "<PULL_SECRET_NAME>"
+          neo4j:
+            image:
+              imagePullSecrets:
+                - "<PULL_SECRET_NAME>"
+          qdrant:
+            image:
+              imagePullSecrets:
+                - name: "<PULL_SECRET_NAME>"
+        guide_sections: [registry-auth-pull-secret]
+        known_issues: []
+
+  - id: registry-population
+    title: Registry population (Boundary 2)
+    # dependsOn: applies only when a mirror layout is chosen. Guide-only — no emit.
+    # The image MANIFEST lives on the layout option (airgap-image-manifest for
+    # per-source, airgap-image-manifest-flat for flat); this axis only frames what
+    # the operator must DO with it.
+    question: "How is your registry populated with the images? Pull-through cache (remote/proxy repos load images lazily on first pull — the registry needs egress to the upstreams), or explicit mirror (every image is pushed ahead of time to local/standard repos — true air-gap)?"
+    options:
+      - id: cache
+        label: "Pull-through cache — remote/proxy repos; registry has upstream egress; nothing to push"
+        overlay: values-registry.yaml
+        emits: {}
+        guide_sections: [registry-population-cache]
+        known_issues: []
+      - id: explicit-mirror
+        label: "Explicit mirror — local/standard repos; every image pushed ahead of time (air-gap)"
+        overlay: values-registry.yaml
+        emits: {}
+        guide_sections: [registry-population-explicit]
+        known_issues: []
 
   - id: storage-persistence
     title: Persistence tier
@@ -850,6 +956,42 @@ axes:
                 dimension: <EMBEDDING_DIMENSION>
         guide_sections: [llm-endpoint, secret-preflight-checklist]
         known_issues: [llm-bootstrap-egress, tiktoken-dns-benign, litellm-configmap-placeholder, embedder-airgap-hang]
+
+  - id: email-config
+    title: Email server
+    question: "Should the platform send email (account verification, notifications) via an SMTP relay, or run without email? Without email, verification is disabled so accounts can be used."
+    options:
+      - id: email-smtp
+        label: "SMTP relay — send email through your SMTP server (verification enforced)"
+        overlay: values-cluster.yaml
+        params:
+          - { id: smtpHost, prompt: "SMTP relay hostname (e.g. smtp.corp.example — the mail server the platform sends through).", required: true }
+          - { id: smtpExistingSecret, prompt: "Name of a pre-created Kubernetes Secret in the release namespace holding EMAIL_SMTP_USERNAME + EMAIL_SMTP_PASSWORD (existingSecret name — not the credentials).", required: true }
+          - { id: smtpPort, prompt: "SMTP port (587 = STARTTLS, 465 = SSL, 25 = none). Default 587." }
+          - { id: smtpTlsMode, prompt: "TLS mode: starttls | ssl | none. Default starttls." }
+          - { id: emailFromAddress, prompt: "Envelope sender address (e.g. noreply@corp.example). Default noreply@runwhen.com." }
+        emits:
+          email:
+            provider: "smtp"          # empty EMAIL_PROVIDER crashes PAPI (see email-empty-provider-crash)
+            fromAddress: "<EMAIL_FROM_ADDRESS>"
+            smtp:
+              host: "<SMTP_HOST>"
+              port: "<SMTP_PORT>"
+              tlsMode: "<SMTP_TLS_MODE>"
+              existingSecret: "<SMTP_EXISTING_SECRET>"
+          papi:
+            skipEmailVerification: "false"
+        guide_sections: [email-smtp, secret-preflight-checklist]
+        known_issues: [email-empty-provider-crash]
+
+      - id: email-disabled
+        label: "No email — disable email verification (accounts sign up / log in without a verified address)"
+        overlay: values-cluster.yaml
+        emits:
+          papi:
+            skipEmailVerification: "true"
+        guide_sections: [email-disabled]
+        known_issues: []
 
   - id: subcharts
     title: Datastore deployment mode

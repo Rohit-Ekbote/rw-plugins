@@ -38,6 +38,13 @@ B="$(build_kit "$FIX/profiles/airgap.yaml" values-registry.yaml values-storage.y
 det=1; for f in $FILES; do diff -q "$A/$f" "$B/$f" >/dev/null 2>&1 || det=0; done
 [ "$det" = 1 ] && ok "two runs are byte-identical (predictable uniformity)" || no "output differs across runs"
 
+echo "== build-guide: multi-line bullet continuations join into <li> (md_to_html) =="
+# helm-install-command.md's <RELEASE> bullet wraps across several indented lines;
+# its continuation must render inside the <li>, not leak as a stray <p>.
+if grep -q '<p>storage, the kit pinned' "$A/USER-GUIDE.html"; then
+  no "multi-line bullet continuation leaked as a stray <p>"
+else ok "multi-line bullet continuation joined into its <li>"; fi
+
 echo "== build-guide: every command block has a copy button =="
 cmds=$(grep -o 'class="cmd"' "$A"/*.html | wc -l | tr -d ' ')
 copies=$(grep -o 'class="copy"' "$A"/*.html | wc -l | tr -d ' ')
@@ -51,9 +58,9 @@ else ok "no external asset references (opens offline)"; fi
 
 echo "== build-guide: composed -f names only the written overlays =="
 gate="$(cat "$A/PREREQUISITES.html")"
-if echo "$gate" | grep -q -- '-f values-cluster.yaml' \
-   && echo "$gate" | grep -q -- '-f values-registry.yaml' \
-   && ! echo "$gate" | grep -q -- '-f values-posture.yaml'; then
+if grep -q -- '-f values-cluster.yaml' <<<"$gate" \
+   && grep -q -- '-f values-registry.yaml' <<<"$gate" \
+   && ! grep -q -- '-f values-posture.yaml' <<<"$gate"; then
   ok "render-gate lists written overlays, omits the un-generated one"
 else no "render-gate -f composition wrong"; fi
 
@@ -81,9 +88,31 @@ grep -q 'No option-specific cluster prerequisites' "$E/PREREQUISITES.html" \
 grep -q 'No guided install sections' "$E/USER-GUIDE.html" && ok "USER-GUIDE has fallback body when no sections apply" \
   || no "USER-GUIDE missing fallback body"
 
+echo "== registry-auth WI profile: no pull-secret guidance, WI section present =="
+W="$(build_kit "$FIX/profiles/airgap-wi.yaml" values-registry.yaml)"
+if grep -qi 'Workload Identity' "$W/USER-GUIDE.html"; then ok "WI profile renders the Workload-Identity guidance"; else no "WI profile missing Workload-Identity section"; fi
+if grep -qiE 'create secret docker-registry|PULL_SECRET_NAME' "$W/USER-GUIDE.html"; then no "WI profile still shows pull-secret creation guidance (should be omitted)"; else ok "WI profile omits pull-secret creation guidance"; fi
+
+echo "== flat-mirror profile: flat prefix resolved, no registry token leak =="
+FL="$(build_kit "$FIX/profiles/flat-mirror.yaml" values-registry.yaml)"
+if grep -qiE '&lt;(REGISTRY_HOST|REGISTRY_HOST_ONLY|FLAT_PREFIX)' "$FL"/*.html; then no "flat kit leaks an unresolved registry token"; else ok "flat kit resolves all registry tokens"; fi
+if grep -q 'flatreg.example.com/rw-virtual' "$FL/USER-GUIDE.html"; then ok "flat kit shows the flat prefix"; else no "flat kit missing the flat prefix value"; fi
+
 echo "== build-guide: HTML is valid enough — doctype + closed body/html =="
-head -1 "$A/index.html" | grep -qi '<!doctype html>' && grep -q '</html>' "$A/index.html" \
+grep -qi '<!doctype html>' <<<"$(head -1 "$A/index.html")" && grep -q '</html>' "$A/index.html" \
   && ok "index.html has doctype and closes" || no "index.html malformed"
+
+echo "== email-smtp profile: SMTP secret guidance rendered, no token leak =="
+ES="$(build_kit "$FIX/profiles/email-smtp.yaml" values-cluster.yaml)"
+if grep -qiE '&lt;(SMTP_HOST|SMTP_PORT|SMTP_TLS_MODE|SMTP_EXISTING_SECRET|EMAIL_FROM_ADDRESS)' "$ES"/*.html; then
+  no "email-smtp kit leaks an unresolved token"; else ok "email-smtp kit resolves all email tokens"; fi
+if grep -q 'create secret generic rw-smtp-creds' "$ES/USER-GUIDE.html"; then
+  ok "email-smtp shows the SMTP secret template"; else no "email-smtp missing SMTP secret template"; fi
+
+echo "== email-disabled profile: skip-verification security note rendered =="
+ED="$(build_kit "$FIX/profiles/email-disabled.yaml" values-cluster.yaml)"
+if grep -qiE 'skipEmailVerification|SKIP_EMAIL_VERIFICATION|weakens account security' "$ED/USER-GUIDE.html"; then
+  ok "email-disabled shows the skip/security note"; else no "email-disabled missing skip note"; fi
 
 echo ""
 echo "build-guide: $PASS passed, $FAIL failed"
