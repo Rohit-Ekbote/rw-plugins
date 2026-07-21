@@ -58,9 +58,9 @@ else ok "no external asset references (opens offline)"; fi
 
 echo "== build-guide: composed -f names only the written overlays =="
 gate="$(cat "$A/PREREQUISITES.html")"
-if echo "$gate" | grep -q -- '-f values-cluster.yaml' \
-   && echo "$gate" | grep -q -- '-f values-registry.yaml' \
-   && ! echo "$gate" | grep -q -- '-f values-posture.yaml'; then
+if grep -q -- '-f values-cluster.yaml' <<<"$gate" \
+   && grep -q -- '-f values-registry.yaml' <<<"$gate" \
+   && ! grep -q -- '-f values-posture.yaml' <<<"$gate"; then
   ok "render-gate lists written overlays, omits the un-generated one"
 else no "render-gate -f composition wrong"; fi
 
@@ -99,7 +99,7 @@ if grep -qiE '&lt;(REGISTRY_HOST|REGISTRY_HOST_ONLY|FLAT_PREFIX)' "$FL"/*.html; 
 if grep -q 'flatreg.example.com/rw-virtual' "$FL/USER-GUIDE.html"; then ok "flat kit shows the flat prefix"; else no "flat kit missing the flat prefix value"; fi
 
 echo "== build-guide: HTML is valid enough — doctype + closed body/html =="
-head -1 "$A/index.html" | grep -qi '<!doctype html>' && grep -q '</html>' "$A/index.html" \
+grep -qi '<!doctype html>' <<<"$(head -1 "$A/index.html")" && grep -q '</html>' "$A/index.html" \
   && ok "index.html has doctype and closes" || no "index.html malformed"
 
 echo "== email-smtp profile: SMTP secret guidance rendered, no token leak =="

@@ -65,12 +65,12 @@ echo "== MISSED-1 (revised): per-source overlays never use registryOverride; fla
 if grep -q 'id: mirrored-per-upstream' "$CATALOG"; then ok "mirrored-per-upstream option present"; else no "mirrored-per-upstream option missing"; fi
 # Per-source is still path-preserving and must NEVER set registryOverride.
 persrc="$(option_block mirrored-per-upstream)"
-if printf '%s' "$persrc" | grep -qE 'registryOverride[[:space:]]*:'; then no "mirrored-per-upstream must not set registryOverride"; else ok "mirrored-per-upstream never sets registryOverride"; fi
-if nocomment "$REG" | grep -qE 'registryOverride[[:space:]]*:'; then no "per-source fixture values-registry.yaml sets registryOverride"; else ok "per-source fixture has no registryOverride"; fi
+if grep -qE 'registryOverride[[:space:]]*:' <<<"$persrc"; then no "mirrored-per-upstream must not set registryOverride"; else ok "mirrored-per-upstream never sets registryOverride"; fi
+if grep -qE 'registryOverride[[:space:]]*:' <<<"$(nocomment "$REG")"; then no "per-source fixture values-registry.yaml sets registryOverride"; else ok "per-source fixture has no registryOverride"; fi
 # Flat is now a supported layout and MUST pair registryOverride with its flat manifest.
 flat="$(option_block flat-mirror | grep -vE '^[[:space:]]*#')"
-if printf '%s' "$flat" | grep -qE 'registryOverride[[:space:]]*:'; then ok "flat-mirror uses registryOverride (expected for flat layout)"; else no "flat-mirror missing registryOverride"; fi
-if printf '%s' "$flat" | grep -q 'airgap-image-manifest-flat'; then ok "flat-mirror references the flat image manifest"; else no "flat-mirror must reference airgap-image-manifest-flat (MISSED-1 guard: no flat overlay without a flat manifest)"; fi
+if grep -qE 'registryOverride[[:space:]]*:' <<<"$flat"; then ok "flat-mirror uses registryOverride (expected for flat layout)"; else no "flat-mirror missing registryOverride"; fi
+if grep -q 'airgap-image-manifest-flat' <<<"$flat"; then ok "flat-mirror references the flat image manifest"; else no "flat-mirror must reference airgap-image-manifest-flat (MISSED-1 guard: no flat overlay without a flat manifest)"; fi
 
 echo "== FLAT: fixture is fully on the flat prefix, no public host =="
 FLATREG="$SCRIPT_DIR/fixtures/expected/flat/values-registry.yaml"
@@ -83,22 +83,22 @@ echo "== AUTH: registry-auth axis owns pull-secret keys =="
 # The pull-secret keys must NO LONGER be inline on the layout option; they live on
 # registry-auth=pull-secret. The layout option must not carry pullSecrets itself.
 layout_block="$(option_block mirrored-per-upstream | nocomment /dev/stdin)"
-if printf '%s' "$layout_block" | grep -qE 'pullSecrets|dockerconfigjsonSecret|imagePullSecrets'; then
+if grep -qE 'pullSecrets|dockerconfigjsonSecret|imagePullSecrets' <<<"$layout_block"; then
   no "mirrored-per-upstream still carries pull-secret keys inline (should move to registry-auth)"
 else ok "mirrored-per-upstream carries no pull-secret keys"; fi
 authps_block="$(option_block pull-secret | nocomment /dev/stdin)"
 for k in "images:" "pullSecrets:" "imagePullSecrets:" "dockerconfigjsonSecret:"; do
-  if printf '%s' "$authps_block" | grep -qF "$k"; then ok "registry-auth=pull-secret emits $k"; else no "registry-auth=pull-secret missing $k"; fi
+  if grep -qF "$k" <<<"$authps_block"; then ok "registry-auth=pull-secret emits $k"; else no "registry-auth=pull-secret missing $k"; fi
 done
 authwi_block="$(option_block workload-identity | nocomment /dev/stdin)"
-if printf '%s' "$authwi_block" | grep -qE 'pullSecrets|imagePullSecrets|dockerconfigjsonSecret'; then
+if grep -qE 'pullSecrets|imagePullSecrets|dockerconfigjsonSecret' <<<"$authwi_block"; then
   no "workload-identity emits pull-secret keys (must be secret-free)"; else ok "workload-identity is secret-free"; fi
 
 echo "== AUTH: workload-identity fixture is secret-free but fully mirrored =="
 WIREG="$SCRIPT_DIR/fixtures/expected/wi-persource/values-registry.yaml"
 if [ -f "$WIREG" ]; then
   no_public "$WIREG" "wi-persource values-registry.yaml"
-  if grep -vE '^[[:space:]]*#' "$WIREG" | grep -qE 'pullSecrets|imagePullSecrets|dockerconfigjsonSecret'; then
+  if grep -qE 'pullSecrets|imagePullSecrets|dockerconfigjsonSecret' <<<"$(grep -vE '^[[:space:]]*#' "$WIREG")"; then
     no "wi-persource overlay contains pull-secret keys (must be secret-free)"; else ok "wi-persource overlay is secret-free"; fi
   if grep -q 'disableLookups: true' "$WIREG"; then ok "wi-persource keeps neo4j disableLookups (MISSED-10)"; else no "wi-persource dropped neo4j disableLookups"; fi
 else no "wi-persource fixture missing"; fi
@@ -126,7 +126,7 @@ echo "== MISSED-2: seaweedfs identities pinned to <release>-seaweedfs-identities
 if has "$STO" "rw-airgap-seaweedfs-identities"; then ok "seaweedfs.s3.existingConfigSecret set to release-scoped identities Secret"; else no "seaweedfs identities Secret not wired (validate will fail-fast)"; fi
 
 echo "== MISSED-3/4: storage classes wired via the correct keys =="
-if grep -A4 'metricstore:' "$STO" | grep -q 'storageClassName'; then ok "metricstore uses persistence.storageClassName"; else no "metricstore still uses the ignored storageClass key"; fi
+if grep -q 'storageClassName' <<<"$(grep -A4 'metricstore:' "$STO")"; then ok "metricstore uses persistence.storageClassName"; else no "metricstore still uses the ignored storageClass key"; fi
 for probe in "spilo:" "dataStorage:" "mode: dynamic" "master:"; do
   if has "$STO" "$probe"; then ok "storage wires component ($probe)"; else no "storage missing component override ($probe)"; fi
 done
@@ -139,7 +139,7 @@ done
 
 echo "== MISSED-6/7: codeCollections + cc-catalog repointed; ccCatalog auth =="
 if has "$REG" "dockerconfigjsonSecret: jcr-pull-secret"; then ok "ccCatalog.auth.dockerconfigjsonSecret wired"; else no "ccCatalog auth secret missing"; fi
-if grep -E 'imageRegistry:|image_registry:' "$REG" | grep -q 'ghcr\.io'; then no "codecollection registry still public ghcr.io"; else ok "every codecollection registry points at the mirror"; fi
+if grep -q 'ghcr\.io' <<<"$(grep -E 'imageRegistry:|image_registry:' "$REG")"; then no "codecollection registry still public ghcr.io"; else ok "every codecollection registry points at the mirror"; fi
 no_public "$STO" "values-storage.yaml"; no_public "$CLU" "values-cluster.yaml"
 
 echo "== RENDER (oracle): helm template fixtures with a NON-rw release =="
@@ -191,7 +191,7 @@ if command -v helm >/dev/null 2>&1 && [ -f "$CHART/Chart.yaml" ]; then
       # SECOND consumer regression emits its OWN failure and moves the pass/fail tally —
       # the known red must not mask a new one.
       failed="$(printf '%s\n' "$cc_out" | awk '/FAIL:/{print $2}' | tr -d ':' | sort -u | grep -v '^$')"
-      if printf '%s\n' "$failed" | grep -qx 'neo4jUri'; then
+      if grep -qx 'neo4jUri' <<<"$failed"; then
         no "byo: KNOWN neo4jUri consumer red (chart bug neo4j-external-agentfarm-usearch)"
       fi
       unexpected="$(printf '%s\n' "$failed" | grep -vx 'neo4jUri' | grep -v '^$' | tr '\n' ' ')"
@@ -262,7 +262,7 @@ for pair in "cache:$pop_cache" "explicit-mirror:$pop_expl"; do
   nm="${pair%%:*}"; blk="${pair#*:}"
   # emits: {} (inline empty map) is guide-only; a bare "emits:" line opens a
   # multi-line block of real emitted keys and must not appear here.
-  if printf '%s' "$blk" | nocomment /dev/stdin | grep -qE '^[[:space:]]*emits:[[:space:]]*$'; then
+  if grep -qE '^[[:space:]]*emits:[[:space:]]*$' <<<"$(printf '%s' "$blk" | nocomment /dev/stdin)"; then
     no "registry-population=$nm must not emit values"
   else ok "registry-population=$nm is guide-only"; fi
 done
@@ -278,9 +278,9 @@ grep -q 'registry-prerequisites' "$CATALOG" && ok "registry-prerequisites refere
 echo "== FLAT: flat-mirror option renders every image on the flat prefix =="
 if grep -q 'id: flat-mirror' "$CATALOG"; then ok "flat-mirror option present"; else no "flat-mirror option missing"; fi
 flat="$(option_block flat-mirror | grep -vE '^[[:space:]]*#')"
-printf '%s' "$flat" | grep -qE 'registryOverride:\s*"<FLAT_PREFIX>"' && ok "flat-mirror sets registryOverride token" || no "flat-mirror missing registryOverride"
+grep -qE 'registryOverride:\s*"<FLAT_PREFIX>"' <<<"$flat" && ok "flat-mirror sets registryOverride token" || no "flat-mirror missing registryOverride"
 for sub in "redis" "neo4j" "vault" "qdrant" "seaweedfs" "metricstore"; do
-  printf '%s' "$flat" | grep -q "$sub" && ok "flat-mirror emits $sub subchart key" || no "flat-mirror missing $sub subchart key"
+  grep -q "$sub" <<<"$flat" && ok "flat-mirror emits $sub subchart key" || no "flat-mirror missing $sub subchart key"
 done
 
 echo ""
