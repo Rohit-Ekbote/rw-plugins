@@ -110,14 +110,14 @@ for ref in \
   "artifactory.corp.example/docker-ghcr/runwhen-contrib" \
   "artifactory.corp.example/docker-ghcr/berriai" \
   "artifactory.corp.example/docker-ghcr/zalando" \
-  "artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28" \
+  "artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28-ubi10" \
   "artifactory.corp.example/docker-suse/bci/bci-base:15.7"; do
   if has "$REG" "$ref"; then ok "per-upstream ref present: ${ref##*/}"; else no "missing per-upstream ref: $ref"; fi
 done
 
 echo "== N1 pinned tags: self-warning + match manifest baseline =="
 if has "$REG" "x-airgap-pinned-tags-notice" && has "$REG" "Chart.lock"; then ok "overlay carries the pinned-tags verify warning"; else no "overlay missing pinned-tags verify warning"; fi
-for pair in "5.26.28 library/neo4j:5.26.28" "2.0.3 hashicorp/vault:2.0.3" "15.7 bci/bci-base:15.7"; do
+for pair in "5.26.28-ubi10 library/neo4j:5.26.28-ubi10" "2.0.3 hashicorp/vault:2.0.3" "15.7 bci/bci-base:15.7"; do
   set -- $pair; ver="$1"; mref="$2"
   if has "$REG" "$ver" && has "$MANIFEST" "$mref"; then ok "pinned $ver matches manifest ($mref)"; else no "pinned $ver does not match manifest baseline"; fi
 done

@@ -27,7 +27,7 @@ these targets (preserving each path shown):
 
 # Pure subcharts (registryOverride does NOT reach these — set via explicit keys, path-preserved):
 <FLAT_PREFIX>/bitnamilegacy/redis:8.2.1-debian-12-r0
-<FLAT_PREFIX>/library/neo4j:5.26.28
+<FLAT_PREFIX>/library/neo4j:5.26.28-ubi10
 <FLAT_PREFIX>/hashicorp/vault:2.0.3               # subchart server
 <FLAT_PREFIX>/qdrant/qdrant:v1.18.0
 <FLAT_PREFIX>/chrislusf/seaweedfs:4.25
@@ -36,7 +36,7 @@ these targets (preserving each path shown):
 
 > Tags track your resolved chart/subchart versions — confirm against `Chart.lock`
 > and the chart-version section. The three hard-pinned subchart tags
-> (`neo4j 5.26.28`, `vault 2.0.3`, `bci-base 15.7`) plus the aux `vault 1.21.2` are
+> (`neo4j 5.26.28-ubi10`, `vault 2.0.3`, `bci-base 15.7`) plus the aux `vault 1.21.2` are
 > the same as the per-source manifest.
 
 **Validation (run before install):**

@@ -17,7 +17,7 @@ x-airgap-pinned-tags-notice:
     the image pull fails. These full-value overrides beat the chart's own
     resolved subchart pins.
   pinnedTags:
-    neo4j: "5.26.28"
+    neo4j: "5.26.28-ubi10"
     vault: "2.0.3"
     bciBaseHelmTest: "15.7"
 global:
@@ -85,7 +85,7 @@ redis:
 neo4j:
   disableLookups: true   # MISSED-10: required regardless of the registry-auth axis choice — chart aborts at template time without it
   image:
-    customImage: artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28   # PINNED-TAG — verify vs Chart.lock
+    customImage: artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28-ubi10   # PINNED-TAG — verify vs Chart.lock
 vault:
   server:
     image:

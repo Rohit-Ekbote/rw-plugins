@@ -6,8 +6,8 @@
 `waiting for neo4j` — even though the operator pointed the platform at a working
 external Neo4j.
 
-**Cause (rwlight-helm chart, re-verified 2026-07-14 on chart 0.2.61; first seen
-0.2.54):** only `templates/configmap.yaml` honors the external URI. Five
+**Cause (rwlight-helm chart, re-verified 2026-08-03 on chart 0.2.71; first seen
+0.2.54):** only `templates/configmap.yaml` honors the external URI. Four
 deployment templates **hardcode the bundled in-cluster Neo4j Service name**
 regardless of `neo4j.deploy`:
 
@@ -15,7 +15,12 @@ regardless of `neo4j.deploy`:
 - `templates/usearch/indexer-deployment.yaml` → `GRAPH_DB_URI: "neo4j://…-lb-neo4j:7687"` (+ an `nc -z …-lb-neo4j` init wait)
 - `templates/usearch/query-deployment.yaml` → same
 - `templates/usearch/worker-deployment.yaml` → same
-- `templates/usearch/neo4j-migration-controller.yaml` → same (added in the 0.2.x line; same hardcoded bundled host)
+
+`templates/usearch/neo4j-migration-controller.yaml` was a **fifth** consumer
+through the 0.2.6x line. As of 0.2.71 it is gated on `{{- if .Values.neo4j.deploy }}`
+(chart commit `d773c44`, "BYO checklist compliance for neo4j migration
+controller"), so it no longer renders at all under BYO — one consumer fewer, but
+the remaining four are unchanged.
 
 When `neo4j.deploy: false`, `<release>-neo4j-lb-neo4j` does not exist, so those
 pods wait forever for a Service that will never come up. The generated values are
@@ -27,7 +32,7 @@ reaches **every** `NEO4J_URI`/`GRAPH_DB_URI` consumer. It fails here — by desi
 surfacing the split: `configmap` gets the external URI while agentfarm/usearch get
 the bundled one. This is a genuine red, not a plugin defect.
 
-**Fix (out of the plugin's scope — belongs in rwlight-helm):** template the five
+**Fix (out of the plugin's scope — belongs in rwlight-helm):** template the four
 deployments off the same external-aware helper the configmap uses (e.g.
 `runwhen.graphDbUri`) instead of hardcoding `…-lb-neo4j`. Until then, external
 Neo4j is only partially supported.
@@ -36,4 +41,6 @@ Neo4j is only partially supported.
 agentfarm/usearch will target the bundled Service name and provision Neo4j at
 exactly `<release>-neo4j-lb-neo4j:7687` (defeats "external").
 
-_Source: value-at-consumer check, first full run 2026-07-07; re-verified on chart 0.2.61 on 2026-07-14 (5th consumer added)._
+_Source: value-at-consumer check, first full run 2026-07-07; re-verified on chart
+0.2.61 on 2026-07-14 (5th consumer added); re-verified on chart 0.2.71 on
+2026-08-03 (5th consumer gated off — back to 4)._
