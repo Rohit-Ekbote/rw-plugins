@@ -23,6 +23,7 @@ NEVER commits — you review the diff and commit.
 
 2. **Apply auto-fixable items** (from `autoFixable[]`), each verified by re-running the detector or the render guard after:
    - `kind: tag` — update the pinned tag in ALL THREE lockstep locations: the option `emits:` (`neo4j.image.customImage` / `vault.server.image.tag` / qdrant `chartTests…bci-base`), the `x-airgap-pinned-tags-notice.pinnedTags`, and the `airgap-image-manifest.md` baseline line. They must stay identical (the render guard asserts it).
+     A finding that says `!= chart render <tag>` is authoritative — that tag is what the chart resolves, so apply it. A finding that says `!= chart example <tag> (no render …)` is NOT: `values-example-*.yaml` is documentation and has lagged the real pin by many releases, so re-run with `helm` and a valid `--chart` to get the rendered tag rather than applying the example verbatim.
    - `kind: chartCompat` (auto bucket) — chart is WITHIN the catalog range; informational, no action.
    - `kind: renderSkipped` (auto bucket) — the detector could not render (no `helm`, or no chart at `--chart`). Not a fix: re-run with a valid `--chart` and `helm` installed to get render coverage.
    - Regenerate affected `tests/fixtures/expected/` overlays and bump `rwl-install-wizard/.claude-plugin/plugin.json` version (patch).

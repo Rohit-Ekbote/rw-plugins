@@ -103,11 +103,11 @@ catalog_pinned() {
 }
 
 # Default bundled render — ground truth for the resolved subchart image tags. The
-# chart's values-example-*.yaml can LAG the actual subchart (e.g. it still shows
-# neo4j:5.26.0 while the pinned subchart renders 5.26.28), which produced spurious
-# tag findings that would revert a correct pin. Used only to SUPPRESS such false
-# positives; when a render is unavailable (no helm, or a non-renderable fixture)
-# the example-based comparison stands unchanged.
+# chart's values-example-*.yaml can LAG the actual subchart by many releases (it
+# still showed neo4j:5.26.0 long after the chart moved to 5.26.28-ubi10), so it is
+# documentation, not a source of truth. When a render is available it decides BOTH
+# whether a pin has drifted and what the pin should become; the example is only a
+# fallback for when there is no render (no helm, or a non-renderable fixture).
 render_default() {
   command -v helm >/dev/null 2>&1 || return 1
   [ -f "$CHART/values.yaml" ] || return 1
@@ -126,20 +126,47 @@ check_tags() {
   c_bci="$(grep -v '^[[:space:]]*#' "$CHART/values.yaml" 2>/dev/null | grep -oE 'bci/bci-base:[^"[:space:]]+' | head -1 | sed 's#.*:##')"
   local rf; rf="$(mktemp)"; render_default > "$rf" 2>/dev/null || : > "$rf"
   catalog_pinned | while IFS="$(printf '\t')" read -r name ver; do
-    local chart_ver="" pat=""
+    local ex_ver="" pat=""
     case "$name" in
-      neo4j)           chart_ver="$c_neo4j"; pat='(library/)?neo4j' ;;
-      vault)           chart_ver="$c_vault"; pat='hashicorp/vault' ;;
-      bciBaseHelmTest) chart_ver="$c_bci";   pat='bci/bci-base' ;;
+      neo4j)           ex_ver="$c_neo4j"; pat='(library/)?neo4j' ;;
+      vault)           ex_ver="$c_vault"; pat='hashicorp/vault' ;;
+      bciBaseHelmTest) ex_ver="$c_bci";   pat='bci/bci-base' ;;
     esac
-    [ -n "$chart_ver" ] || continue
-    [ "$chart_ver" != "$ver" ] || continue
-    # Suppress: the pinned tag IS what the chart actually renders (stale example).
-    if [ -s "$rf" ] && grep -E '(image|customImage):' "$rf" \
-         | grep -oE "${pat}:[A-Za-z0-9._-]+" | sed 's/.*://' | grep -qx "$ver"; then
+
+    # Every tag this image renders under. An image can legitimately render more
+    # than one (vault ships 2.0.3 for the subchart server and 1.21.2 for the
+    # chart's own vault-binary jobs), so the question is set MEMBERSHIP: "is the
+    # pinned tag one of the tags the chart actually resolves?"
+    local rendered=""
+    [ -s "$rf" ] && rendered="$(grep -E '(image|customImage):' "$rf" \
+      | grep -oE "${pat}:[A-Za-z0-9._-]+" | sed 's/.*://' | sort -u)"
+
+    if [ -n "$rendered" ]; then
+      # EXACT, whole-line, fixed-string. Deliberately NOT suffix- or prefix-
+      # tolerant: `5.26.28` and `5.26.28-ubi10` are different images (Debian vs
+      # UBI base, different CVE surface), so treating the suffix as noise would
+      # have SUPPRESSED the real finding when the chart moved to the UBI build in
+      # 0.2.70 — the catalog would have kept mirroring the Debian image forever.
+      # -F because a pinned tag is a literal: unescaped `.` in `5.26.28` would
+      # otherwise match any character.
+      printf '%s\n' "$rendered" | grep -qxF "$ver" && continue
+      # Drifted. Report what the chart RENDERS as the target — never the example,
+      # which is what previously proposed reverting 5.26.28 to the stale 5.26.0.
+      # If several tags render and none is the pin, list them all rather than
+      # guessing; the maintainer picks.
+      local target; target="$(printf '%s' "$rendered" | tr '\n' ',' | sed 's/,$//')"
+      emit_finding auto tag "$name" "pinned $name tag $ver != chart render $target" \
+        "$CHART/values.yaml" "$ver" "$target"
       continue
     fi
-    emit_finding auto tag "$name" "pinned $name tag $ver != chart example $chart_ver" "$ex" "$ver" "$chart_ver"
+
+    # No render for this image — weaker evidence. The example may be stale, so
+    # say so in the finding instead of presenting it as a safe mechanical fix.
+    [ -n "$ex_ver" ] || continue
+    [ "$ex_ver" = "$ver" ] && continue
+    emit_finding auto tag "$name" \
+      "pinned $name tag $ver != chart example $ex_ver (no render — the example can lag; verify against the chart before applying)" \
+      "$ex" "$ver" "$ex_ver"
   done
   rm -f "$rf"
 }
