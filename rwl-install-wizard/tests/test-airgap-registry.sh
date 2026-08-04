@@ -109,15 +109,24 @@ for ref in \
   "artifactory.corp.example/docker-runwhen-self-hosted/runwhen-self-hosted/platform-images" \
   "artifactory.corp.example/docker-ghcr/runwhen-contrib" \
   "artifactory.corp.example/docker-ghcr/berriai" \
-  "artifactory.corp.example/docker-ghcr/zalando" \
-  "artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28" \
+  "artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28-ubi10" \
   "artifactory.corp.example/docker-suse/bci/bci-base:15.7"; do
   if has "$REG" "$ref"; then ok "per-upstream ref present: ${ref##*/}"; else no "missing per-upstream ref: $ref"; fi
 done
 
+# Spilo moved to ghcr.io/runwhen-contrib in chart 0.2.73 and replaced
+# bitnamilegacy/postgresql as the db-init psql client in 0.2.74. A stale zalando /
+# dockerhub mapping still renders ON the mirror — so no_public stays green — but at
+# a path the operator never populated, i.e. ImagePullBackOff on the Postgres
+# StatefulSet and db-init Job. Assert the mapping, not just "not public".
+if has "$REG" "docker-ghcr/zalando"; then no "spilo still mapped to the retired zalando remote"; else ok "spilo off the retired zalando remote"; fi
+if grep -A1 'dbInit:' "$REG" | grep -q 'docker-ghcr/runwhen-contrib'; then
+  ok "dbInit (spilo psql client) rides the ghcr/runwhen-contrib remote"
+else no "dbInit still points at a remote that will not hold spilo-17"; fi
+
 echo "== N1 pinned tags: self-warning + match manifest baseline =="
 if has "$REG" "x-airgap-pinned-tags-notice" && has "$REG" "Chart.lock"; then ok "overlay carries the pinned-tags verify warning"; else no "overlay missing pinned-tags verify warning"; fi
-for pair in "5.26.28 library/neo4j:5.26.28" "2.0.3 hashicorp/vault:2.0.3" "15.7 bci/bci-base:15.7"; do
+for pair in "5.26.28-ubi10 library/neo4j:5.26.28-ubi10" "2.0.3 hashicorp/vault:2.0.3" "15.7 bci/bci-base:15.7"; do
   set -- $pair; ver="$1"; mref="$2"
   if has "$REG" "$ver" && has "$MANIFEST" "$mref"; then ok "pinned $ver matches manifest ($mref)"; else no "pinned $ver does not match manifest baseline"; fi
 done

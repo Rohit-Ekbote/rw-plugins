@@ -23,6 +23,7 @@ NEVER commits — you review the diff and commit.
 
 2. **Apply auto-fixable items** (from `autoFixable[]`), each verified by re-running the detector or the render guard after:
    - `kind: tag` — update the pinned tag in ALL THREE lockstep locations: the option `emits:` (`neo4j.image.customImage` / `vault.server.image.tag` / qdrant `chartTests…bci-base`), the `x-airgap-pinned-tags-notice.pinnedTags`, and the `airgap-image-manifest.md` baseline line. They must stay identical (the render guard asserts it).
+     A finding that says `!= chart render <tag>` is authoritative — that tag is what the chart resolves, so apply it. A finding that says `!= chart example <tag> (no render …)` is NOT: `values-example-*.yaml` is documentation and has lagged the real pin by many releases, so re-run with `helm` and a valid `--chart` to get the rendered tag rather than applying the example verbatim.
    - `kind: chartCompat` (auto bucket) — chart is WITHIN the catalog range; informational, no action.
    - `kind: renderSkipped` (auto bucket) — the detector could not render (no `helm`, or no chart at `--chart`). Not a fix: re-run with a valid `--chart` and `helm` installed to get render coverage.
    - Regenerate affected `tests/fixtures/expected/` overlays and bump `rwl-install-wizard/.claude-plugin/plugin.json` version (patch).
@@ -39,6 +40,19 @@ NEVER commits — you review the diff and commit.
      truncated). Like validators, structural changes are maintainer-approved.
    - `kind: render` — an option no longer renders. Likely a renamed/removed key; propose the mapping from the chart, or propose deprecating the option.
    - `kind: publicRef` — an option leaks a public ref against this chart; propose the per-upstream override that fixes it.
+   - `kind: mirrorPath` — the per-upstream overlay renders an image onto a path the
+     air-gap manifest never tells the operator to create. Install-breaking, and
+     invisible to `publicRef` (the ref IS on the mirror) and to `check_tags` (which
+     covers only the three hard-pinned images). Usually the chart moved an image to
+     a new upstream and the catalog's `registry:` mapping still points at the old
+     one — fix the mapping. If instead the chart legitimately pulls something new,
+     add it to the manifest. Chart 0.2.73 moving Spilo from `ghcr.io/zalando` to
+     `ghcr.io/runwhen-contrib` is the worked example.
+   - `kind: manifestOrphan` — the manifest lists an image nothing renders. Either
+     the chart dropped it (remove the line — e.g. `bitnamilegacy/postgresql` and the
+     aux `hashicorp/vault:1.21.2`), or a `mirrorPath` finding in the same run means
+     a mapping is sending that image somewhere else; fix the mapping first, then
+     re-run before touching the manifest.
    - `kind: chartCompat` (decide bucket) — the chart version is OUTSIDE the catalog's `chartCompat` range. Do NOT bump the range as a reflex: first reconcile all other drift and confirm the verification gate (step 4) is green, THEN widen `chartCompat:` in `knob-catalog.yaml` (and its header note) to include the new version — that assertion means "the catalog now supports this chart."
    - `kind: coverageGap` — a NEW chart capability the catalog does not model yet
      (the class the render check is blind to). The `chart` field is the capability
@@ -77,6 +91,16 @@ reason about these classes by hand (each learned from the 0.2.59 STOXX failure):
   AFTER the baseline snapshot — so when you re-seed the baseline for a new chart,
   skim the full extract for existing-but-unmodeled switches too.
 
+- **Images mirrored to a path nobody populates.** A ref can be ON the mirror and
+  still unpullable, because the chart moved the image to a different upstream and
+  the catalog's `registry:` mapping still points at the old one. `publicRef` only
+  asks whether a ref escaped the mirror, and `check_tags` only covers the three
+  hard-pinned images, so this class was fully invisible until chart 0.2.73 broke
+  air-gap Postgres. `check_manifest` now covers it (`mirrorPath` /
+  `manifestOrphan`) — but ONLY for the per-upstream layout. The FLAT manifest
+  flattens source paths by design, so its tags are still hand-verified: after any
+  image-touching chart bump, render the flat fixture and diff its refs against
+  `airgap-image-manifest-flat.md` yourself.
 - **Inline `{{ fail }}` invariants.** `check_fails` now surfaces *new* ones as
   `kind: fail` findings — but you must still model each into the catalog (or
   confirm it is already satisfied). The render check actively hides some: it

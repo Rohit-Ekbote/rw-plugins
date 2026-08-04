@@ -13,7 +13,7 @@ x-airgap-pinned-tags-notice:
     the image pull fails. These full-value overrides beat the chart's own
     resolved subchart pins.
   pinnedTags:
-    neo4j: "5.26.28"
+    neo4j: "5.26.28-ubi10"
     vault: "2.0.3"
     bciBaseHelmTest: "15.7"
 global:
@@ -23,7 +23,7 @@ global:
     busybox:
       registry: artifactory.corp.example/docker-dockerhub
     dbInit:
-      registry: artifactory.corp.example/docker-dockerhub
+      registry: artifactory.corp.example/docker-ghcr/runwhen-contrib
     vaultClient:
       registry: artifactory.corp.example/docker-dockerhub
 images:
@@ -76,7 +76,7 @@ ccCatalog:
 postgresql:
   spilo:
     image:
-      registry: artifactory.corp.example/docker-ghcr/zalando
+      registry: artifactory.corp.example/docker-ghcr/runwhen-contrib
   pgbouncer:
     image:
       registry: artifactory.corp.example/docker-dockerhub
@@ -87,7 +87,7 @@ redis:
 neo4j:
   disableLookups: true   # MISSED-10: required with image.imagePullSecrets or the subchart aborts
   image:
-    customImage: artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28   # PINNED-TAG — verify vs Chart.lock
+    customImage: artifactory.corp.example/docker-dockerhub/library/neo4j:5.26.28-ubi10   # PINNED-TAG — verify vs Chart.lock
     imagePullSecrets:
       - jcr-pull-secret
 vault:

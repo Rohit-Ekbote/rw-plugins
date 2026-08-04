@@ -4,6 +4,20 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL="$(dirname "$DIR")"
 DET="$SKILL/detect-drift.sh"
 FIX="$DIR/fixtures"
+REPO="$(cd "$SKILL/../../.." && pwd)"
+CATALOG="$REPO/rwl-install-wizard/data/knob-catalog.yaml"
+
+# The catalog's current pin for an image. Fixtures that need a tag to read as
+# "unchanged" must DERIVE it — a hardcoded literal goes stale the moment a pin is
+# bumped (the neo4j pin moved to 5.26.28-ubi10 while a fixture still asserted the
+# bare 5.26.28 was unchanged, turning a passing test red for the wrong reason).
+catalog_pin(){
+  ruby -ryaml -e '
+    YAML.load_file(ARGV[0])["axes"].each{|a| (a["options"]||[]).each{|o|
+      n=((o["emits"]||{})["x-airgap-pinned-tags-notice"]||{})["pinnedTags"]
+      next unless n && n[ARGV[1]]
+      puts n[ARGV[1]]; exit }}' "$CATALOG" "$1"
+}
 PASS=0; FAIL=0
 ok(){ printf "  PASS: %s\n" "$1"; PASS=$((PASS+1)); }
 no(){ printf "  FAIL: %s\n" "$1"; FAIL=$((FAIL+1)); }
@@ -82,6 +96,85 @@ else
 fi
 rm -rf "$OUT4"
 
+# When a pin HAS drifted, the proposed target must come from the render, not from
+# values-example-*.yaml. Regression: the detector once proposed reverting neo4j
+# 5.26.28 to the example's 5.26.0 — 28 patch releases backwards — because the
+# example lagged and only the suppression consulted the render.
+echo "== drifted tag: the proposed target is render-sourced, never the stale example =="
+OUT5="$(mktemp -d)"
+REALCHART="${RWL_CHART_PATH:-/Users/rohitekbote/wd/code/github.com/runwhen/rwlight-helm/charts/runwhen-platform}"
+if command -v helm >/dev/null 2>&1 && [ -f "$REALCHART/values.yaml" ]; then
+  # Pin neo4j to a tag the chart cannot render, so a finding is guaranteed to fire.
+  sed 's/^\( *\)neo4j: ".*"$/\1neo4j: "0.0.0-absent"/' "$CATALOG" > "$OUT5/catalog.yaml"
+  bash "$DET" --chart "$REALCHART" --catalog "$OUT5/catalog.yaml" --out "$OUT5" >/dev/null 2>&1
+  trow="$(awk -F'\t' '$2=="tag"&&$3=="neo4j"' "$OUT5/findings.tsv")"
+  tgt="$(printf '%s\n' "$trow" | awk -F'\t' '{print $7}')"
+  exv="$(grep -oE 'library/neo4j:[^"[:space:]]+' "$REALCHART/values-example-airgap-jcr.yaml" 2>/dev/null | head -1 | sed 's#.*:##')"
+  # INDEPENDENT oracle — what the chart actually renders. Asserting against the
+  # detector's own reported value would be circular: the buggy version reported
+  # the example tag, which trivially equals the example tag.
+  rtag="$(helm template rw "$REALCHART" \
+        --set objectStorage.kind=seaweedfs --set seaweedfs.deploy=true \
+        --set seaweedfs.s3.existingConfigSecret=rw-seaweedfs-identities \
+        --set llmGateway.deploy=false 2>/dev/null \
+      | grep -E '(image|customImage):' | grep -oE '(library/)?neo4j:[A-Za-z0-9._-]+' \
+      | sed 's/.*://' | sort -u | head -1)"
+  [ -n "$trow" ] && ok "absent pin is flagged" || no "absent pin not flagged"
+  printf '%s\n' "$trow" | grep -q 'chart render' && ok "detail names the render as the source" || no "detail still cites the example"
+  if [ -z "$rtag" ]; then
+    no "test oracle could not resolve the chart's rendered neo4j tag"
+  elif [ "$tgt" = "$rtag" ]; then
+    ok "target equals the chart's rendered tag ($rtag)"
+  else
+    no "target $tgt is not the chart's rendered tag $rtag"
+  fi
+  # The historical regression, stated explicitly: only meaningful while the
+  # chart's example still lags the render.
+  if [ -n "$exv" ] && [ "$exv" != "$rtag" ]; then
+    [ "$tgt" = "$exv" ] && no "proposed the stale example tag $exv" \
+                        || ok "did not propose the stale example tag ($exv)"
+  else
+    ok "SKIP stale-example assert (chart example has caught up to the render)"
+  fi
+else
+  ok "SKIP render-sourced target check (no chart/helm)"
+fi
+rm -rf "$OUT5"
+
+# check_manifest: an image can render ON the mirror yet at a path the operator was
+# never told to create. Chart 0.2.73 moved Spilo to ghcr.io/runwhen-contrib while
+# the overlay still said ghcr.io/zalando — check_tags (3 of ~21 images) and the
+# publicRef guard ("did it escape the mirror?") both stayed green while the air-gap
+# install could not pull Postgres.
+echo "== manifest cross-check: rendered images must sit on manifest-listed paths =="
+OUT6="$(mktemp -d)"
+REALCHART="${RWL_CHART_PATH:-/Users/rohitekbote/wd/code/github.com/runwhen/rwlight-helm/charts/runwhen-platform}"
+if command -v helm >/dev/null 2>&1 && [ -f "$REALCHART/values.yaml" ]; then
+  bash "$DET" --chart "$REALCHART" --out "$OUT6" >/dev/null 2>&1
+  if awk -F'\t' '$2=="mirrorPath"||$2=="manifestOrphan"' "$OUT6/findings.tsv" | grep -q .; then
+    no "shipped catalog disagrees with the air-gap manifest"
+  else ok "shipped catalog and manifest agree (no mirrorPath/manifestOrphan)"; fi
+  # Restore the exact pre-0.5.2 bug: BOTH Spilo consumers on their old remotes
+  # (the server on zalando, the db-init psql client on Docker Hub). Reverting only
+  # one is not the bug — the other consumer still renders at the manifest path, so
+  # the entry is correctly NOT an orphan.
+  perl -0pe 's{(spilo:\n\s*image:\n(?:\s*#[^\n]*\n)*\s*registry: ")([^"]*?)/docker-ghcr/runwhen-contrib}{$1$2/docker-ghcr/zalando}s;
+              s{(dbInit:\n(?:\s*#[^\n]*\n)*\s*registry: ")([^"]*?)/docker-ghcr/runwhen-contrib}{$1$2/docker-dockerhub}s' \
+    "$CATALOG" > "$OUT6/catalog.yaml"
+  bash "$DET" --chart "$REALCHART" --catalog "$OUT6/catalog.yaml" --out "$OUT6/b" >/dev/null 2>&1
+  if awk -F'\t' '$2=="mirrorPath"' "$OUT6/b/findings.tsv" | grep -q 'zalando/spilo-17'; then
+    ok "a rendered image on a retired upstream path is flagged mirrorPath"
+  else no "mirrorPath missed a rendered image on an unmirrored path"; fi
+  # With NO consumer left on the right path, the manifest entry becomes an orphan —
+  # which is what names the fix for the maintainer.
+  if awk -F'\t' '$2=="manifestOrphan"' "$OUT6/b/findings.tsv" | grep -q 'runwhen-contrib/spilo-17'; then
+    ok "the now-unrendered manifest entry is flagged manifestOrphan"
+  else no "manifestOrphan did not surface the now-unrendered manifest entry"; fi
+else
+  ok "SKIP manifest cross-check (no chart/helm)"
+fi
+rm -rf "$OUT6"
+
 echo "== report assembly: md + json grouped by bucket =="
 OUT5="$(mktemp -d)"
 bash "$DET" --chart "$FIX/chart-compat" --out "$OUT5" >/dev/null 2>&1
@@ -104,15 +197,16 @@ rm -rf "$OUT5L"
 echo "== tag drift: bci-base bumped in chart values.yaml is flagged =="
 OUTB="$(mktemp -d)"; CHB="$OUTB/chart"; mkdir -p "$CHB"
 printf 'apiVersion: v2\nname: runwhen-platform\nversion: 0.2.54\n' > "$CHB/Chart.yaml"
-cat > "$CHB/values-example-airgap-jcr.yaml" <<'YML'
+# neo4j/vault carry the catalog's own pins, so only bci-base may be flagged.
+cat > "$CHB/values-example-airgap-jcr.yaml" <<YML
 neo4j:
   image:
-    customImage: "h/docker-dockerhub/library/neo4j:5.26.28"
+    customImage: "h/docker-dockerhub/library/neo4j:$(catalog_pin neo4j)"
 vault:
   server:
     image:
       repository: "h/docker-dockerhub/hashicorp/vault"
-      tag: "2.0.3"
+      tag: "$(catalog_pin vault)"
 YML
 cat > "$CHB/values.yaml" <<'YML'
 qdrant:
