@@ -291,8 +291,13 @@ axes:
             utility:
               busybox:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"
+              # dbInit is the `psql` client for db-init-job.yaml. Chart 0.2.74
+              # stopped using docker.io/bitnamilegacy/postgresql here and reuses
+              # the Spilo image instead, so this rides the ghcr remote with spilo
+              # below — NOT docker-dockerhub. Mapping it to the old remote renders
+              # <HOST>/docker-dockerhub/spilo-17, a path no mirror will hold.
               dbInit:
-                registry: "<REGISTRY_HOST>/docker-dockerhub"
+                registry: "<REGISTRY_HOST>/docker-ghcr/runwhen-contrib"
               vaultClient:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"
           images:
@@ -348,7 +353,11 @@ axes:
           postgresql:
             spilo:
               image:
-                registry: "<REGISTRY_HOST>/docker-ghcr/zalando"
+                # Chart 0.2.73 moved Spilo off ghcr.io/zalando/spilo-17:4.0-p2 to
+                # the RunWhen build ghcr.io/runwhen-contrib/spilo-17. The old
+                # zalando remote still renders on the mirror (so a public-host
+                # check stays green) but at a path the operator never populated.
+                registry: "<REGISTRY_HOST>/docker-ghcr/runwhen-contrib"
             pgbouncer:
               image:
                 registry: "<REGISTRY_HOST>/docker-dockerhub"

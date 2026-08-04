@@ -24,11 +24,12 @@ subchart versions — they move independently of the parent chart version):
 |---|---|---|
 | Neo4j | `library/neo4j` | `5.26.28-ubi10` (hard-pinned in `values-registry.yaml`; the chart's own default since 0.2.70 — a UBI-based build that receives Red Hat security patches, NOT the Debian-based `5.26.28`) |
 | Vault (server) | `hashicorp/vault` | `2.0.3` (hard-pinned in `values-registry.yaml`) |
-| Vault (init/unseal/backup) | `hashicorp/vault` | `1.21.2` (chart-inherited; registry re-pointed only) |
+| Vault (init/unseal/backup) | `hashicorp/vault` | `2.0.3` (chart-inherited; re-pinned to the server tag in chart 0.2.68 — the old aux `1.21.2` is no longer pulled) |
 | Qdrant (helm test) | `bci/bci-base` | `15.7` (hard-pinned; helm-test pod only) |
-| Qdrant | `qdrant/qdrant` | chart default (`v1.18.0`) |
+| Qdrant | `qdrant/qdrant` | chart default (`v1.18.3`) |
 | Redis | `bitnamilegacy/redis` | chart default |
 | SeaweedFS | `chrislusf/seaweedfs` | chart default |
+| Postgres (server + psql client) | `runwhen-contrib/spilo-17` | chart default (`17.10-ff07941a`); moved off `zalando/spilo-17` in 0.2.73, and replaced `bitnamilegacy/postgresql` as the client image in 0.2.74 |
 
 The three **hard-pinned** tags above (`neo4j 5.26.28-ubi10`, `vault 2.0.3`,
 `bci-base 15.7`) are full-value overrides that beat the chart's own resolved

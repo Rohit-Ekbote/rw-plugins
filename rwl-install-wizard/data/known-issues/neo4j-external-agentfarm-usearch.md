@@ -6,7 +6,7 @@
 `waiting for neo4j` — even though the operator pointed the platform at a working
 external Neo4j.
 
-**Cause (rwlight-helm chart, re-verified 2026-08-03 on chart 0.2.71; first seen
+**Cause (rwlight-helm chart, re-verified 2026-08-04 on chart 0.2.74; first seen
 0.2.54):** only `templates/configmap.yaml` honors the external URI. Four
 deployment templates **hardcode the bundled in-cluster Neo4j Service name**
 regardless of `neo4j.deploy`:
@@ -43,4 +43,5 @@ exactly `<release>-neo4j-lb-neo4j:7687` (defeats "external").
 
 _Source: value-at-consumer check, first full run 2026-07-07; re-verified on chart
 0.2.61 on 2026-07-14 (5th consumer added); re-verified on chart 0.2.71 on
-2026-08-03 (5th consumer gated off — back to 4)._
+2026-08-03 (5th consumer gated off — back to 4); re-verified on chart 0.2.74 on
+2026-08-04 (unchanged)._

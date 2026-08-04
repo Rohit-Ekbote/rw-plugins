@@ -16,13 +16,14 @@ x-jcr-anchors:
   jcr-rwsh:        &jcr_rwsh        "<REGISTRY_HOST>/docker-runwhen-self-hosted/runwhen-self-hosted/platform-images"
   jcr-dh:          &jcr_dh          "<REGISTRY_HOST>/docker-dockerhub"
   jcr-ghcr-rwc:    &jcr_ghcr_rwc    "<REGISTRY_HOST>/docker-ghcr/runwhen-contrib"
-  jcr-ghcr-zalando: &jcr_ghcr_zalando "<REGISTRY_HOST>/docker-ghcr/zalando"
   jcr-ghcr-berriai: &jcr_ghcr_berriai "<REGISTRY_HOST>/docker-ghcr/berriai"
 
 global:
   utility:
     busybox:     { registry: *jcr_dh }
-    dbInit:      { registry: *jcr_dh }
+    # Spilo, not bitnamilegacy/postgresql, is the psql client from chart 0.2.74 —
+    # so dbInit rides the ghcr/runwhen-contrib remote, not Docker Hub.
+    dbInit:      { registry: *jcr_ghcr_rwc }
     vaultClient: { registry: *jcr_dh }
 
 images:
@@ -38,7 +39,7 @@ runnerMetricProxy:
 postgresql:
   spilo:
     image:
-      registry: *jcr_ghcr_zalando
+      registry: *jcr_ghcr_rwc
   pgbouncer:
     image:
       registry: *jcr_dh

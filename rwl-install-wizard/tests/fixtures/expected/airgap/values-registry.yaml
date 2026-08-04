@@ -23,7 +23,7 @@ global:
     busybox:
       registry: artifactory.corp.example/docker-dockerhub
     dbInit:
-      registry: artifactory.corp.example/docker-dockerhub
+      registry: artifactory.corp.example/docker-ghcr/runwhen-contrib
     vaultClient:
       registry: artifactory.corp.example/docker-dockerhub
 images:
@@ -76,7 +76,7 @@ ccCatalog:
 postgresql:
   spilo:
     image:
-      registry: artifactory.corp.example/docker-ghcr/zalando
+      registry: artifactory.corp.example/docker-ghcr/runwhen-contrib
   pgbouncer:
     image:
       registry: artifactory.corp.example/docker-dockerhub

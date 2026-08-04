@@ -32,28 +32,29 @@ step 1 once you have the chart on disk. Save as `images-to-mirror.txt`
 
 ```text
 # images-to-mirror.txt — upstream refs; mirror each to <REGISTRY_HOST>/<repo>:<tag>
-us-docker.pkg.dev/runwhen-self-hosted/platform-images/backend-services:2026-07-02.1
-us-docker.pkg.dev/runwhen-self-hosted/platform-images/agent-farm:2026-07-02.1
-us-docker.pkg.dev/runwhen-self-hosted/platform-images/runner-control:rc-2026-06-12.1
-us-docker.pkg.dev/runwhen-self-hosted/platform-images/webhooks-service:2026-06-29.1
-us-docker.pkg.dev/runwhen-self-hosted/platform-images/usearch:2026-07-02.1
-us-docker.pkg.dev/runwhen-self-hosted/platform-images/ui:2026-07-02.1
-us-docker.pkg.dev/runwhen-self-hosted/platform-images/shared-services:2026-07-02.1
-ghcr.io/runwhen-contrib/runwhen-platform-mcp:2026-06-30.2
-ghcr.io/runwhen-contrib/cc-catalog-svc:2026-06-23.2
-ghcr.io/runwhen-contrib/cortex-tenant:2026-05-20.1
+us-docker.pkg.dev/runwhen-self-hosted/platform-images/backend-services:2026-08-03.1
+us-docker.pkg.dev/runwhen-self-hosted/platform-images/agent-farm:2026-08-03.1
+us-docker.pkg.dev/runwhen-self-hosted/platform-images/runner-control:2026-07-29.1
+us-docker.pkg.dev/runwhen-self-hosted/platform-images/webhooks-service:2026-08-03.1
+us-docker.pkg.dev/runwhen-self-hosted/platform-images/usearch:2026-08-03.1
+us-docker.pkg.dev/runwhen-self-hosted/platform-images/ui:2026-08-03.1
+us-docker.pkg.dev/runwhen-self-hosted/platform-images/shared-services:2026-08-03.1
+ghcr.io/runwhen-contrib/runwhen-platform-mcp:2026-07-29.2
+ghcr.io/runwhen-contrib/cc-catalog-svc:2026-07-23.3
+ghcr.io/runwhen-contrib/cortex-tenant:2026-07-31.1
 ghcr.io/berriai/litellm-non_root:v1.88.2
-ghcr.io/zalando/spilo-17:4.0-p2
+# Spilo is BOTH the Postgres server and the `psql` client for the db-init /
+# migration jobs (chart 0.2.74) — one image covers both. Moved off
+# ghcr.io/zalando/spilo-17 in 0.2.73.
+ghcr.io/runwhen-contrib/spilo-17:17.10-ff07941a
 docker.io/library/busybox:1.36
 docker.io/hashicorp/vault:2.0.3
-docker.io/hashicorp/vault:1.21.2
 docker.io/bitnamilegacy/redis:8.2.1-debian-12-r0
-docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r4
-docker.io/grafana/mimir:2.14.0
-docker.io/qdrant/qdrant:v1.18.0
+docker.io/grafana/mimir:3.1.2
+docker.io/qdrant/qdrant:v1.18.3
 docker.io/library/neo4j:5.26.28-ubi10
 docker.io/chrislusf/seaweedfs:4.25
-docker.io/edoburu/pgbouncer:v1.24.1-p1
+docker.io/edoburu/pgbouncer:v1.25.2-p0
 # helm-test-only (qdrant test pod) — mirror ONLY if you run `helm test`:
 registry.suse.com/bci/bci-base:15.7
 ```
@@ -73,12 +74,13 @@ registry.suse.com/bci/bci-base:15.7
 > change one here, change it in the overlay too. The `-ubi10` suffix on neo4j is
 > deliberate — the chart pins the UBI-based build (Red Hat security patches) as
 > its default, so mirror `5.26.28-ubi10`, not the Debian-based `5.26.28`. The
-> second vault line,
-> `hashicorp/vault:1.21.2`, is the chart's own vault-binary jobs
-> (init/auto-unseal/backup) — NOT an overlay override; the overlay re-points its
-> registry only, so it inherits that tag from the chart and the mirror must hold
-> both vault tags. The wizard's regression guard
-> asserts the two stay identical, so they cannot silently drift.
+> wizard's regression guard asserts overlay and baseline stay identical, so they
+> cannot silently drift.
+>
+> **Vault is now a single tag.** Older kits listed a second
+> `hashicorp/vault:1.21.2` for the chart's own vault-binary jobs
+> (init/auto-unseal/backup). Chart 0.2.68 re-pinned that client to match the
+> subchart server, so `2.0.3` is the only vault tag to mirror.
 
 #### 3. Copy each image to the mirror — PER-UPSTREAM, path-preserving (skopeo)
 

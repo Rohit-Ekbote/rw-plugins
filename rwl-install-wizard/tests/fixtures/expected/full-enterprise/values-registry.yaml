@@ -16,7 +16,7 @@ global:
     busybox:
       registry: jcr.example.com/docker-dockerhub
     dbInit:
-      registry: jcr.example.com/docker-dockerhub
+      registry: jcr.example.com/docker-ghcr/runwhen-contrib
     vaultClient:
       registry: jcr.example.com/docker-dockerhub
 images:
@@ -69,7 +69,7 @@ ccCatalog:
 postgresql:
   spilo:
     image:
-      registry: jcr.example.com/docker-ghcr/zalando
+      registry: jcr.example.com/docker-ghcr/runwhen-contrib
   pgbouncer:
     image:
       registry: jcr.example.com/docker-dockerhub
