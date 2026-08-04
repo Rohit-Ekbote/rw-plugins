@@ -245,11 +245,82 @@ check_render() {
   done
 }
 
+# check_manifest — the class BOTH existing image checks miss. `check_tags` covers
+# only the three hard-pinned tags (3 of ~21 images), and the publicRef guard only
+# asks whether a ref ESCAPED the mirror — never whether it landed on a path the
+# operator was actually told to create. Chart 0.2.73 moved Spilo from
+# ghcr.io/zalando to ghcr.io/runwhen-contrib; the per-upstream overlay kept
+# rendering <HOST>/docker-ghcr/zalando/spilo-17, which is on the mirror (both
+# checks green) and unpullable in a real air-gap cluster.
+#
+# The per-upstream layout is PATH-PRESERVING, so a manifest entry
+#   <upstream-registry>/<source-path>:<tag>
+# must appear in the render as
+#   <REGISTRY_HOST>/<remote>/<source-path>:<tag>
+# i.e. "<source-path>:<tag> is a /-delimited suffix of the rendered ref". Deriving
+# the invariant this way needs no upstream->remote table: it stays correct when a
+# new remote is added. Only the per-upstream manifest is checked — the FLAT layout
+# drops source paths by design, so the suffix rule does not apply to it.
+MANIFEST_MD="$REPO/rwl-install-wizard/data/guide-sections/airgap-image-manifest.md"
+
+check_manifest() {
+  command -v helm >/dev/null 2>&1 || return 0
+  [ -f "$CHART/values.yaml" ] || return 0
+  [ -f "$MANIFEST_MD" ] || return 0
+  local tmp ov; tmp="$(mktemp -d)"
+  ov="$(ruby "$SKILL_DIR/gen-overlays.rb" "$CATALOG" "$tmp" "$LAYOUT_PARTNER")"
+  [ -n "$ov" ] || { rm -rf "$tmp"; return 0; }
+  # Gateway ON with a dummy model: litellm IS in the manifest, and the chart
+  # fail-fasts on an empty model_list — rendering it off would report the gateway
+  # image as a phantom orphan.
+  if ! helm template rw "$CHART" -f "$CHART/values.yaml" -f "$tmp/$ov" \
+        --set objectStorage.kind=seaweedfs --set seaweedfs.deploy=true \
+        --set seaweedfs.s3.existingConfigSecret=rw-seaweedfs-identities \
+        --set llmGateway.deploy=true --set llmGateway.database.enabled=true \
+        --set 'llmGateway.models[0].model_name=m' \
+        --set 'llmGateway.models[0].litellm_params.model=openai/m' \
+        --set 'llmGateway.models[0].litellm_params.api_key=x' \
+        > "$tmp/render.yaml" 2>"$tmp/err"; then
+    rm -rf "$tmp"; return 0
+  fi
+  # Manifest source-paths: keep ref lines only, drop trailing comments, strip the
+  # upstream registry (everything up to the first `/`).
+  grep -E '^[a-z0-9.-]+\.[a-z]+/' "$MANIFEST_MD" \
+    | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]*$//; s#^[^/]+/##' \
+    | sort -u > "$tmp/manifest.txt"
+  grep -Eo '(image|customImage): *"?[^" }]+' "$tmp/render.yaml" \
+    | sed -E 's/^[^:]*: *"?//' | sort -u > "$tmp/render.txt"
+  : > "$tmp/hit"
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    local m=""
+    while IFS= read -r src; do
+      [ -n "$src" ] || continue
+      case "$ref" in */"$src") m="$src"; break ;; esac
+    done < "$tmp/manifest.txt"
+    if [ -n "$m" ]; then
+      printf '%s\n' "$m" >> "$tmp/hit"
+    else
+      emit_finding decide mirrorPath "" \
+        "rendered image sits on no path the air-gap manifest tells operators to mirror: $ref" \
+        "$MANIFEST_MD" "$ref" ""
+    fi
+  done < "$tmp/render.txt"
+  comm -23 "$tmp/manifest.txt" <(sort -u "$tmp/hit") | while IFS= read -r orphan; do
+    [ -n "$orphan" ] || continue
+    emit_finding decide manifestOrphan "" \
+      "air-gap manifest lists an image the chart no longer renders: $orphan" \
+      "$MANIFEST_MD" "$orphan" ""
+  done
+  rm -rf "$tmp"
+}
+
 check_chartcompat
 check_validators
 check_fails
 check_coverage
 check_tags
+check_manifest
 check_render
 ruby "$SKILL_DIR/assemble-report.rb" "$FINDINGS" "$OUT"
 A="$(awk -F'\t' '$1=="auto"' "$FINDINGS" | wc -l | tr -d ' ')"

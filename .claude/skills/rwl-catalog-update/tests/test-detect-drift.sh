@@ -141,6 +141,40 @@ else
 fi
 rm -rf "$OUT5"
 
+# check_manifest: an image can render ON the mirror yet at a path the operator was
+# never told to create. Chart 0.2.73 moved Spilo to ghcr.io/runwhen-contrib while
+# the overlay still said ghcr.io/zalando — check_tags (3 of ~21 images) and the
+# publicRef guard ("did it escape the mirror?") both stayed green while the air-gap
+# install could not pull Postgres.
+echo "== manifest cross-check: rendered images must sit on manifest-listed paths =="
+OUT6="$(mktemp -d)"
+REALCHART="${RWL_CHART_PATH:-/Users/rohitekbote/wd/code/github.com/runwhen/rwlight-helm/charts/runwhen-platform}"
+if command -v helm >/dev/null 2>&1 && [ -f "$REALCHART/values.yaml" ]; then
+  bash "$DET" --chart "$REALCHART" --out "$OUT6" >/dev/null 2>&1
+  if awk -F'\t' '$2=="mirrorPath"||$2=="manifestOrphan"' "$OUT6/findings.tsv" | grep -q .; then
+    no "shipped catalog disagrees with the air-gap manifest"
+  else ok "shipped catalog and manifest agree (no mirrorPath/manifestOrphan)"; fi
+  # Restore the exact pre-0.5.2 bug: BOTH Spilo consumers on their old remotes
+  # (the server on zalando, the db-init psql client on Docker Hub). Reverting only
+  # one is not the bug — the other consumer still renders at the manifest path, so
+  # the entry is correctly NOT an orphan.
+  perl -0pe 's{(spilo:\n\s*image:\n(?:\s*#[^\n]*\n)*\s*registry: ")([^"]*?)/docker-ghcr/runwhen-contrib}{$1$2/docker-ghcr/zalando}s;
+              s{(dbInit:\n(?:\s*#[^\n]*\n)*\s*registry: ")([^"]*?)/docker-ghcr/runwhen-contrib}{$1$2/docker-dockerhub}s' \
+    "$CATALOG" > "$OUT6/catalog.yaml"
+  bash "$DET" --chart "$REALCHART" --catalog "$OUT6/catalog.yaml" --out "$OUT6/b" >/dev/null 2>&1
+  if awk -F'\t' '$2=="mirrorPath"' "$OUT6/b/findings.tsv" | grep -q 'zalando/spilo-17'; then
+    ok "a rendered image on a retired upstream path is flagged mirrorPath"
+  else no "mirrorPath missed a rendered image on an unmirrored path"; fi
+  # With NO consumer left on the right path, the manifest entry becomes an orphan —
+  # which is what names the fix for the maintainer.
+  if awk -F'\t' '$2=="manifestOrphan"' "$OUT6/b/findings.tsv" | grep -q 'runwhen-contrib/spilo-17'; then
+    ok "the now-unrendered manifest entry is flagged manifestOrphan"
+  else no "manifestOrphan did not surface the now-unrendered manifest entry"; fi
+else
+  ok "SKIP manifest cross-check (no chart/helm)"
+fi
+rm -rf "$OUT6"
+
 echo "== report assembly: md + json grouped by bucket =="
 OUT5="$(mktemp -d)"
 bash "$DET" --chart "$FIX/chart-compat" --out "$OUT5" >/dev/null 2>&1
